@@ -13,7 +13,7 @@ export default function Pagination({
   onPageChange,
   onPageSizeChange,
   pageSizeOptions = [10, 20, 50, 100],
-  darkMode = true,
+  darkMode = false,
   className = ''
 }) {
   const totalPages = Math.ceil(totalItems / pageSize) || 1;
@@ -53,9 +53,9 @@ export default function Pagination({
   if (totalItems <= 0) return null;
 
   const containerBg = darkMode ? 'bg-slate-900 border-slate-800 text-slate-300' : 'bg-white border-slate-200 text-slate-600';
-  const btnBorder = darkMode ? 'border-slate-800 hover:bg-slate-800 text-slate-300' : 'border-slate-200 hover:bg-slate-100 text-slate-700';
-  const activeBtnClass = 'bg-blue-600 text-white font-bold border-blue-600';
-  const selectBg = darkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-slate-50 border-slate-300 text-slate-700';
+  const btnBorder = darkMode ? 'border-slate-800 hover:bg-slate-800 text-slate-300' : 'border-slate-200 hover:bg-slate-100 text-slate-700 bg-white shadow-2xs';
+  const activeBtnClass = 'bg-blue-600 text-white font-bold border-blue-600 shadow-xs';
+  const selectBg = darkMode ? 'bg-slate-950 border-slate-800 text-slate-200' : 'bg-white border-slate-300 text-slate-700 shadow-2xs';
 
   return (
     <div className={`flex flex-col sm:flex-row items-center justify-between gap-3 px-4 py-3 border-t text-xs font-medium select-none ${containerBg} ${className}`}>

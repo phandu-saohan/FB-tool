@@ -72,7 +72,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100 overflow-hidden font-sans">
+    <div className="flex h-screen bg-slate-100/70 text-slate-800 overflow-hidden font-sans">
       {/* Left Sidebar */}
       <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
 
@@ -82,7 +82,7 @@ export default function App() {
         <Header browserStatus={browserStatus} onRefreshStatus={refreshBrowserStatus} />
 
         {/* Scrollable View Content */}
-        <main className="flex-1 overflow-y-auto bg-slate-950">
+        <main className="flex-1 overflow-y-auto bg-slate-50/70">
           {renderActiveView()}
         </main>
       </div>

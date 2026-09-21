@@ -188,21 +188,21 @@ export default function GroupsView({ setActiveTab }) {
     switch (status) {
       case 'JOINED':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-            <CheckCircle2 className="w-3 h-3 mr-1" />
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+            <CheckCircle2 className="w-3 h-3 mr-1 text-emerald-600" />
             ĐÃ THAM GIA
           </span>
         );
       case 'PENDING':
         return (
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">
-            <Clock className="w-3 h-3 mr-1" />
+          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <Clock className="w-3 h-3 mr-1 text-amber-600" />
             CHỜ DUYỆT
           </span>
         );
       default:
         return (
-          <span className="px-2 py-0.5 rounded text-xs font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">
+          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">
             CHƯA THAM GIA
           </span>
         );
@@ -214,8 +214,8 @@ export default function GroupsView({ setActiveTab }) {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Quản lý Facebook Groups</h2>
-          <p className="text-slate-400 text-sm mt-1">Danh sách hội nhóm, đồng bộ nhóm đã tham gia và tự động tham gia nhóm mới.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Quản lý Facebook Groups</h2>
+          <p className="text-slate-500 text-sm mt-1">Danh sách hội nhóm, đồng bộ nhóm đã tham gia và tự động tham gia nhóm mới.</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
@@ -223,9 +223,9 @@ export default function GroupsView({ setActiveTab }) {
           <button
             onClick={handleSyncJoined}
             disabled={syncingJoined}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-100 rounded-xl text-sm font-semibold border border-slate-700 shadow-sm transition"
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-white hover:bg-slate-50 disabled:opacity-50 text-slate-700 rounded-xl text-sm font-semibold border border-slate-300 shadow-2xs transition"
           >
-            {syncingJoined ? <Loader2 className="w-4 h-4 animate-spin text-blue-400" /> : <RefreshCw className="w-4 h-4 text-emerald-400" />}
+            {syncingJoined ? <Loader2 className="w-4 h-4 animate-spin text-blue-600" /> : <RefreshCw className="w-4 h-4 text-emerald-600" />}
             <span>{syncingJoined ? 'Đang đồng bộ...' : 'Đồng bộ nhóm đã tham gia'}</span>
           </button>
 
@@ -234,7 +234,7 @@ export default function GroupsView({ setActiveTab }) {
             <button
               onClick={handleBulkJoin}
               disabled={bulkJoining}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow transition"
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow-sm transition"
             >
               {bulkJoining ? <Loader2 className="w-4 h-4 animate-spin" /> : <UserPlus className="w-4 h-4" />}
               <span>Tham gia {selectedUnjoinedCount} nhóm đã chọn</span>
@@ -245,7 +245,7 @@ export default function GroupsView({ setActiveTab }) {
           <button
             onClick={() => setActiveTab('create-post')}
             disabled={selectedCount === 0}
-            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow transition"
+            className="inline-flex items-center space-x-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow-sm transition"
           >
             <PenSquare className="w-4 h-4" />
             <span>Đăng bài ({selectedCount} nhóm)</span>
@@ -255,30 +255,30 @@ export default function GroupsView({ setActiveTab }) {
 
       {/* Notice Banner if any */}
       {statusNotice && (
-        <div className="p-3 bg-blue-500/10 border border-blue-500/30 rounded-xl text-xs text-blue-300 flex items-center justify-between">
+        <div className="p-3.5 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-center justify-between shadow-2xs">
           <span>{statusNotice}</span>
-          <button onClick={() => setStatusNotice('')} className="text-slate-400 hover:text-white text-xs ml-3 font-semibold">Đóng</button>
+          <button onClick={() => setStatusNotice('')} className="text-slate-500 hover:text-slate-800 text-xs ml-3 font-semibold">Đóng</button>
         </div>
       )}
 
       {/* Filter and Bulk Actions Bar */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-sm">
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-4 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
         <div className="flex flex-wrap items-center gap-3 flex-1 min-w-[320px]">
           <div className="relative flex-1 min-w-[200px]">
-            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-500" />
+            <Search className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
             <input
               type="text"
               placeholder="Lọc theo tên nhóm hoặc từ khóa..."
               value={keywordFilter}
               onChange={(e) => setKeywordFilter(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl pl-9 pr-4 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
             />
           </div>
 
           <select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition"
           >
             <option value="">Tất cả trạng thái</option>
             <option value="JOINED">Đã tham gia (JOINED)</option>
@@ -289,7 +289,7 @@ export default function GroupsView({ setActiveTab }) {
           <select
             value={privacyFilter}
             onChange={(e) => setPrivacyFilter(e.target.value)}
-            className="bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+            className="bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-800 focus:outline-none focus:border-blue-500 focus:bg-white transition"
           >
             <option value="">Tất cả quyền riêng tư</option>
             <option value="Public">Công khai (Public)</option>
@@ -298,7 +298,7 @@ export default function GroupsView({ setActiveTab }) {
 
           <button
             onClick={loadGroups}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="p-2 rounded-xl bg-white hover:bg-slate-50 text-slate-600 border border-slate-200 shadow-2xs transition"
             title="Tải lại"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -308,29 +308,29 @@ export default function GroupsView({ setActiveTab }) {
         <div className="flex items-center space-x-3">
           <button
             onClick={() => handleSelectAll(true)}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg border border-slate-300 shadow-2xs transition"
           >
-            <CheckSquare className="w-3.5 h-3.5 text-blue-400" />
+            <CheckSquare className="w-3.5 h-3.5 text-blue-600" />
             <span>Chọn tất cả</span>
           </button>
           <button
             onClick={() => handleSelectAll(false)}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 rounded-lg border border-slate-700 transition"
+            className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-white hover:bg-slate-50 text-xs font-semibold text-slate-700 rounded-lg border border-slate-300 shadow-2xs transition"
           >
-            <Square className="w-3.5 h-3.5" />
+            <Square className="w-3.5 h-3.5 text-slate-500" />
             <span>Bỏ chọn tất cả</span>
           </button>
-          <span className="text-xs text-slate-400">
-            Đã chọn: <b className="text-white">{selectedCount}</b> / {groups.length}
+          <span className="text-xs text-slate-500">
+            Đã chọn: <b className="text-slate-900">{selectedCount}</b> / {groups.length}
           </span>
         </div>
       </div>
 
       {/* Table */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-lg">
+      <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm text-slate-300">
-            <thead className="bg-slate-950 text-slate-400 text-xs uppercase font-semibold border-b border-slate-800">
+          <table className="w-full text-left text-sm text-slate-700">
+            <thead className="bg-slate-50 text-slate-600 text-xs uppercase font-semibold border-b border-slate-200">
               <tr>
                 <th className="p-4 w-12 text-center">Chọn</th>
                 <th className="p-4">Tên nhóm</th>
@@ -341,7 +341,7 @@ export default function GroupsView({ setActiveTab }) {
                 <th className="p-4 text-right">Thao tác</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800">
+            <tbody className="divide-y divide-slate-100">
               {groups.length === 0 ? (
                 <tr>
                   <td colSpan="7" className="p-8 text-center text-slate-500">
@@ -350,27 +350,27 @@ export default function GroupsView({ setActiveTab }) {
                 </tr>
               ) : (
                 paginatedItems.map((grp) => (
-                  <tr key={grp.id} className="hover:bg-slate-800/40 transition">
+                  <tr key={grp.id} className="hover:bg-slate-50/70 transition">
                     <td className="p-4 text-center">
                       <input
                         type="checkbox"
                         checked={grp.selected}
                         onChange={() => handleToggleSelect(grp)}
-                        className="rounded bg-slate-800 border-slate-700 text-blue-600 focus:ring-0 cursor-pointer"
+                        className="rounded border-slate-300 text-blue-600 focus:ring-0 cursor-pointer"
                       />
                     </td>
-                    <td className="p-4 font-semibold text-white max-w-sm truncate" title={grp.name}>
+                    <td className="p-4 font-semibold text-slate-900 max-w-sm truncate" title={grp.name}>
                       {grp.name}
                     </td>
-                    <td className="p-4 text-slate-400">{grp.members || 'N/A'}</td>
+                    <td className="p-4 text-slate-600">{grp.members || 'N/A'}</td>
                     <td className="p-4">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        grp.privacy === 'Public' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700 text-slate-300'
+                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                        grp.privacy === 'Public' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-50 text-amber-700 border border-amber-200'
                       }`}>
-                        {grp.privacy || 'Public'}
+                        {grp.privacy === 'Public' ? '🌐 Công khai' : '🔒 Riêng tư'}
                       </span>
                     </td>
-                    <td className="p-4 text-xs text-blue-400">{grp.keyword || '—'}</td>
+                    <td className="p-4 text-xs font-medium text-blue-600">{grp.keyword || '—'}</td>
                     <td className="p-4">
                       {getStatusBadge(grp.status)}
                     </td>
@@ -379,7 +379,7 @@ export default function GroupsView({ setActiveTab }) {
                         <button
                           onClick={() => handleJoinSingle(grp)}
                           disabled={joiningGroupId === grp.id}
-                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 rounded text-xs font-semibold border border-emerald-500/30 transition disabled:opacity-50"
+                          className="inline-flex items-center space-x-1 px-2.5 py-1 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-xs font-semibold border border-emerald-200 transition disabled:opacity-50"
                         >
                           {joiningGroupId === grp.id ? (
                             <Loader2 className="w-3 h-3 animate-spin" />
@@ -393,14 +393,14 @@ export default function GroupsView({ setActiveTab }) {
                         href={grp.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="inline-flex items-center space-x-1 text-xs text-blue-400 hover:text-blue-300 hover:underline"
+                        className="inline-flex items-center space-x-1 text-xs font-medium text-blue-600 hover:text-blue-700 hover:underline"
                       >
                         <span>Mở FB</span>
                         <ExternalLink className="w-3 h-3" />
                       </a>
                       <button
                         onClick={() => handleDelete(grp.id)}
-                        className="text-slate-500 hover:text-rose-400 transition"
+                        className="text-slate-400 hover:text-rose-600 transition"
                         title="Xóa nhóm"
                       >
                         <Trash2 className="w-4 h-4 inline" />
@@ -420,7 +420,7 @@ export default function GroupsView({ setActiveTab }) {
           pageSize={pageSize}
           onPageChange={setCurrentPage}
           onPageSizeChange={setPageSize}
-          darkMode={true}
+          darkMode={false}
         />
       </div>
     </div>

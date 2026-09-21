@@ -53,15 +53,15 @@ export default function LogsView() {
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Nhật ký Hệ thống (Live Logs)</h2>
-          <p className="text-slate-400 text-sm mt-1">Theo dõi hoạt động tự động hóa và thông báo lỗi theo thời gian thực.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Nhật ký Hệ thống (Live Logs)</h2>
+          <p className="text-slate-500 text-sm mt-1">Theo dõi hoạt động tự động hóa và thông báo lỗi theo thời gian thực.</p>
         </div>
 
         <div className="flex items-center space-x-3">
           <select
             value={filterLevel}
             onChange={(e) => setFilterLevel(e.target.value)}
-            className="bg-slate-900 border border-slate-800 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none"
+            className="bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-semibold text-slate-800 focus:outline-none shadow-2xs"
           >
             <option value="ALL">Tất cả mức độ (ALL)</option>
             <option value="INFO">Chỉ [INFO]</option>
@@ -70,19 +70,19 @@ export default function LogsView() {
             <option value="ERROR">Chỉ [ERROR]</option>
           </select>
 
-          <label className="flex items-center space-x-2 text-xs text-slate-400 cursor-pointer select-none">
+          <label className="flex items-center space-x-2 text-xs text-slate-600 cursor-pointer select-none">
             <input
               type="checkbox"
               checked={autoScroll}
               onChange={(e) => setAutoScroll(e.target.checked)}
-              className="rounded bg-slate-800 border-slate-700 text-blue-600"
+              className="rounded bg-slate-50 border-slate-300 text-blue-600 focus:ring-0"
             />
             <span>Tự cuộn xuống</span>
           </label>
 
           <button
             onClick={fetchLogs}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition"
             title="Làm mới"
           >
             <RefreshCw className="w-4 h-4" />
@@ -91,26 +91,26 @@ export default function LogsView() {
       </div>
 
       {/* Terminal View */}
-      <div className="bg-slate-950 border border-slate-800 rounded-2xl p-4 font-mono text-xs shadow-2xl overflow-hidden flex flex-col h-[600px]">
-        <div className="flex items-center space-x-2 pb-3 border-b border-slate-800/80 mb-3 px-2">
-          <div className="w-3 h-3 rounded-full bg-rose-500/80" />
-          <div className="w-3 h-3 rounded-full bg-amber-500/80" />
-          <div className="w-3 h-3 rounded-full bg-emerald-500/80" />
-          <span className="text-slate-500 text-[11px] ml-2">automation.log — Live Console Buffer</span>
+      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-2xs overflow-hidden flex flex-col h-[600px]">
+        <div className="flex items-center space-x-2 py-3 px-4 bg-slate-50 border-b border-slate-200">
+          <div className="w-3 h-3 rounded-full bg-rose-400" />
+          <div className="w-3 h-3 rounded-full bg-amber-400" />
+          <div className="w-3 h-3 rounded-full bg-emerald-400" />
+          <span className="text-slate-500 text-[11px] font-mono ml-2 font-semibold">automation.log — Live Console Buffer</span>
         </div>
 
-        <div ref={logContainerRef} className="flex-1 overflow-y-auto space-y-1.5 px-2">
+        <div ref={logContainerRef} className="flex-1 overflow-y-auto space-y-1.5 p-4 bg-slate-950 font-mono text-xs">
           {totalItems === 0 ? (
-            <div className="text-slate-600 py-12 text-center">Chưa có nhật ký nào được ghi nhận.</div>
+            <div className="text-slate-500 py-12 text-center">Chưa có nhật ký nào được ghi nhận.</div>
           ) : (
             paginatedItems.map((item, i) => (
-              <div key={i} className="flex items-start space-x-2 leading-relaxed hover:bg-slate-900/50 px-1 rounded transition">
+              <div key={i} className="flex items-start space-x-2 leading-relaxed hover:bg-slate-900/80 px-1 rounded transition">
                 <span className="text-slate-500 select-none shrink-0">{item.created_at}</span>
                 <span className={`shrink-0 ${getLevelColor(item.level)}`}>[{item.level}]</span>
                 {item.action && (
                   <span className="text-purple-400 shrink-0 font-medium">[{item.action}]</span>
                 )}
-                <span className="text-slate-300 break-all">{item.message}</span>
+                <span className="text-slate-200 break-all">{item.message}</span>
               </div>
             ))
           )}
@@ -123,8 +123,8 @@ export default function LogsView() {
           onPageChange={setCurrentPage}
           onPageSizeChange={setPageSize}
           pageSizeOptions={[20, 30, 50, 100]}
-          darkMode={true}
-          className="rounded-b-xl border-t border-slate-800"
+          darkMode={false}
+          className="border-t border-slate-200 bg-white"
         />
       </div>
     </div>

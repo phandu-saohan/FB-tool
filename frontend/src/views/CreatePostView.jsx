@@ -226,15 +226,15 @@ export default function CreatePostView({ setActiveTab }) {
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Soạn thảo & Sáng tạo nội dung</h2>
-          <p className="text-slate-400 text-sm mt-1">Viết bài thủ công hoặc sáng tạo nội dung tự động bằng AI Studio.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Soạn thảo & Sáng tạo nội dung</h2>
+          <p className="text-slate-500 text-sm mt-1">Viết bài thủ công hoặc sáng tạo nội dung tự động bằng AI Studio.</p>
         </div>
 
         <button
           onClick={() => setAiModalOpen(true)}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-purple-500/20 transition"
+          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white rounded-xl text-sm font-semibold shadow-sm transition"
         >
           <Sparkles className="w-4 h-4" />
           <span>Sáng tạo với AI Studio</span>
@@ -244,34 +244,34 @@ export default function CreatePostView({ setActiveTab }) {
       {/* Main Grid: Left editor, Right targets */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
         {/* Editor Form */}
-        <div className="lg:col-span-8 bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md space-y-5">
+        <div className="lg:col-span-8 bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-5">
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Tiêu đề bài viết</label>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Tiêu đề bài viết</label>
             <input
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="VD: [Hội Nghị 2026] Đột phá công nghệ thẩm mỹ..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white transition"
             />
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-1">Nội dung bài viết (Facebook Content)</label>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Nội dung bài viết (Facebook Content)</label>
             <textarea
               rows="12"
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder="Nhập nội dung bài viết đầy đủ hoặc bấm 'Sáng tạo với AI Studio'..."
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl p-4 text-sm text-white focus:outline-none focus:border-blue-500 leading-relaxed font-sans"
+              className="w-full bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white leading-relaxed font-sans transition"
             />
           </div>
 
           {/* Image Attachment */}
           <div>
-            <label className="block text-xs font-semibold text-slate-400 uppercase mb-2">Đính kèm hình ảnh</label>
+            <label className="block text-xs font-semibold text-slate-600 uppercase mb-2">Đính kèm hình ảnh</label>
             {imageUrl ? (
-              <div className="relative inline-block border border-slate-700 rounded-xl overflow-hidden group">
+              <div className="relative inline-block border border-slate-200 rounded-xl overflow-hidden group shadow-2xs">
                 <img src={imageUrl} alt="Upload preview" className="max-h-48 object-cover rounded-xl" />
                 <button
                   type="button"
@@ -282,9 +282,9 @@ export default function CreatePostView({ setActiveTab }) {
                 </button>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-slate-800 hover:border-slate-700 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition">
-                <Upload className="w-6 h-6 text-slate-500 mb-2" />
-                <span className="text-xs text-slate-400 font-medium">Bấm để tải ảnh lên (PNG, JPG, WebP)</span>
+              <label className="border-2 border-dashed border-slate-300 hover:border-blue-400 bg-slate-50/50 hover:bg-slate-50 rounded-xl p-6 flex flex-col items-center justify-center cursor-pointer transition">
+                <Upload className="w-6 h-6 text-slate-400 mb-2" />
+                <span className="text-xs text-slate-600 font-medium">Bấm để tải ảnh lên (PNG, JPG, WebP)</span>
                 <input
                   type="file"
                   accept="image/*"
@@ -294,17 +294,17 @@ export default function CreatePostView({ setActiveTab }) {
                 />
               </label>
             )}
-            {uploadingImage && <p className="text-xs text-blue-400 mt-1">Đang tải ảnh lên...</p>}
+            {uploadingImage && <p className="text-xs text-blue-600 mt-1">Đang tải ảnh lên...</p>}
           </div>
 
           {/* Buttons: Preview, Save Draft, Publish */}
-          <div className="pt-4 border-t border-slate-800 flex items-center justify-between">
+          <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
             <button
               type="button"
               onClick={() => setPreviewModal(true)}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl border border-slate-700 transition"
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-300 shadow-2xs transition"
             >
-              <Eye className="w-4 h-4" />
+              <Eye className="w-4 h-4 text-slate-500" />
               <span>Xem trước (Preview)</span>
             </button>
 
@@ -313,9 +313,9 @@ export default function CreatePostView({ setActiveTab }) {
                 type="button"
                 onClick={handleSaveDraft}
                 disabled={submitting}
-                className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-sm font-medium rounded-xl border border-slate-700 transition"
+                className="inline-flex items-center space-x-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-700 text-sm font-medium rounded-xl border border-slate-300 shadow-2xs transition"
               >
-                <Save className="w-4 h-4" />
+                <Save className="w-4 h-4 text-slate-500" />
                 <span>Lưu nháp</span>
               </button>
 
@@ -323,7 +323,7 @@ export default function CreatePostView({ setActiveTab }) {
                 type="button"
                 onClick={handlePublishNow}
                 disabled={submitting}
-                className="inline-flex items-center space-x-2 px-5 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition"
+                className="inline-flex items-center space-x-2 px-5 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold rounded-xl shadow-sm transition"
               >
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
                 <span>Đăng bài (Publish Queue)</span>
@@ -334,34 +334,34 @@ export default function CreatePostView({ setActiveTab }) {
 
         {/* Right Column: Targets Selection */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md space-y-3.5">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-3.5">
             {/* Header with Title and All/None toggle */}
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center space-x-2">
-                <Users className="w-4 h-4 text-blue-400" />
-                <h3 className="font-bold text-sm text-white">Chọn Groups mục tiêu</h3>
-                <span className="text-xs bg-blue-500/10 text-blue-400 font-semibold px-2 py-0.5 rounded-full border border-blue-500/20">
+                <Users className="w-4 h-4 text-blue-600" />
+                <h3 className="font-bold text-sm text-slate-900">Chọn Groups mục tiêu</h3>
+                <span className="text-xs bg-blue-50 text-blue-700 font-semibold px-2 py-0.5 rounded-full border border-blue-200">
                   {targetGroupIds.length}/{availableGroups.length}
                 </span>
               </div>
               <button 
                 type="button"
                 onClick={() => setTargetGroupIds(targetGroupIds.length === availableGroups.length ? [] : availableGroups.map(g => g.id))}
-                className="text-xs text-blue-400 hover:underline"
+                className="text-xs text-blue-600 hover:underline font-medium"
               >
                 {targetGroupIds.length === availableGroups.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
               </button>
             </div>
 
             {/* Privacy Filter Tabs */}
-            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80">
+            <div className="flex items-center space-x-1 bg-slate-100 p-1 rounded-xl border border-slate-200">
               <button
                 type="button"
                 onClick={() => setGroupPrivacyFilter('ALL')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium transition text-center ${
                   groupPrivacyFilter === 'ALL'
-                    ? 'bg-slate-800 text-white shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-slate-200'
+                    ? 'bg-white text-slate-900 shadow-2xs font-semibold'
+                    : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
                 Tất cả ({availableGroups.length})
@@ -371,11 +371,11 @@ export default function CreatePostView({ setActiveTab }) {
                 onClick={() => setGroupPrivacyFilter('Public')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center space-x-1 transition ${
                   groupPrivacyFilter === 'Public'
-                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-emerald-400'
+                    ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs font-semibold'
+                    : 'text-slate-600 hover:text-emerald-700'
                 }`}
               >
-                <Globe className="w-3 h-3 text-emerald-400" />
+                <Globe className="w-3 h-3 text-emerald-600" />
                 <span>Công khai ({publicGroups.length})</span>
               </button>
               <button
@@ -383,11 +383,11 @@ export default function CreatePostView({ setActiveTab }) {
                 onClick={() => setGroupPrivacyFilter('Private')}
                 className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center space-x-1 transition ${
                   groupPrivacyFilter === 'Private'
-                    ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40 shadow-sm font-semibold'
-                    : 'text-slate-400 hover:text-amber-400'
+                    ? 'bg-amber-50 text-amber-700 border border-amber-200 shadow-2xs font-semibold'
+                    : 'text-slate-600 hover:text-amber-700'
                 }`}
               >
-                <Lock className="w-3 h-3 text-amber-400" />
+                <Lock className="w-3 h-3 text-amber-600" />
                 <span>Riêng tư ({privateGroups.length})</span>
               </button>
             </div>
@@ -398,7 +398,7 @@ export default function CreatePostView({ setActiveTab }) {
               <button
                 type="button"
                 onClick={selectOnlyPublic}
-                className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition"
+                className="text-[11px] px-2 py-0.5 rounded-md bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition font-medium"
                 title="Chọn thêm tất cả nhóm công khai"
               >
                 + Công khai ({publicGroups.length})
@@ -406,7 +406,7 @@ export default function CreatePostView({ setActiveTab }) {
               <button
                 type="button"
                 onClick={selectOnlyPrivate}
-                className="text-[11px] px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition"
+                className="text-[11px] px-2 py-0.5 rounded-md bg-amber-50 hover:bg-amber-100 text-amber-700 border border-amber-200 transition font-medium"
                 title="Chọn thêm tất cả nhóm riêng tư"
               >
                 + Riêng tư ({privateGroups.length})
@@ -415,7 +415,7 @@ export default function CreatePostView({ setActiveTab }) {
                 <button
                   type="button"
                   onClick={toggleSelectFiltered}
-                  className="text-[11px] px-2 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition ml-auto"
+                  className="text-[11px] px-2 py-0.5 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 transition ml-auto font-medium"
                 >
                   {filteredGroups.every(g => targetGroupIds.includes(g.id)) ? 'Bỏ chọn tab này' : 'Chọn hết tab này'}
                 </button>
@@ -424,19 +424,19 @@ export default function CreatePostView({ setActiveTab }) {
 
             {/* Search Input within groups */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={groupSearchTerm}
                 onChange={(e) => setGroupSearchTerm(e.target.value)}
                 placeholder="Lọc nhanh tên nhóm..."
-                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+                className="w-full bg-slate-50 border border-slate-200 rounded-lg pl-8 pr-7 py-1.5 text-xs text-slate-800 placeholder-slate-400 focus:outline-none focus:border-blue-500 focus:bg-white"
               />
               {groupSearchTerm && (
                 <button 
                   type="button"
                   onClick={() => setGroupSearchTerm('')} 
-                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
                 >
                   <X className="w-3 h-3" />
                 </button>
@@ -446,7 +446,7 @@ export default function CreatePostView({ setActiveTab }) {
             {/* Groups List */}
             <div className="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
               {filteredGroups.length === 0 ? (
-                <p className="text-xs text-slate-500 py-4 text-center">
+                <p className="text-xs text-slate-400 py-4 text-center">
                   {availableGroups.length === 0 
                     ? 'Chưa có nhóm nào trong DB.' 
                     : 'Không tìm thấy nhóm phù hợp bộ lọc.'}
@@ -458,36 +458,36 @@ export default function CreatePostView({ setActiveTab }) {
                   return (
                     <label 
                       key={grp.id} 
-                      className={`flex items-start space-x-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                      className={`flex items-start space-x-2.5 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
                         isSelected 
-                          ? 'bg-blue-600/10 border-blue-500/40 text-white' 
-                          : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                          ? 'bg-blue-50/80 border-blue-300 text-slate-900 shadow-2xs' 
+                          : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                       }`}
                     >
                       <input
                         type="checkbox"
                         checked={isSelected}
                         onChange={() => toggleTargetGroup(grp.id)}
-                        className="rounded bg-slate-800 border-slate-700 text-blue-600 mt-0.5"
+                        className="rounded border-slate-300 text-blue-600 mt-0.5"
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="font-semibold truncate text-slate-200">{grp.name}</div>
+                        <div className="font-semibold truncate text-slate-900">{grp.name}</div>
                         <div className="flex items-center space-x-2 mt-1">
-                          <span className="text-[11px] text-slate-400">{grp.members || 'N/A'}</span>
-                          <span className="text-slate-600">•</span>
+                          <span className="text-[11px] text-slate-500">{grp.members || 'N/A'}</span>
+                          <span className="text-slate-300">•</span>
                           {isPublic ? (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                              <Globe className="w-2.5 h-2.5 mr-1" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
+                              <Globe className="w-2.5 h-2.5 mr-1 text-emerald-600" />
                               <span>Công khai</span>
                             </span>
                           ) : (
-                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                              <Lock className="w-2.5 h-2.5 mr-1" />
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                              <Lock className="w-2.5 h-2.5 mr-1 text-amber-600" />
                               <span>Riêng tư</span>
                             </span>
                           )}
                           {grp.status === 'JOINED' && (
-                            <span className="text-[10px] text-blue-400 font-semibold bg-blue-500/10 px-1 py-0.2 rounded border border-blue-500/20">
+                            <span className="text-[10px] text-blue-700 font-semibold bg-blue-50 px-1.5 py-0.2 rounded border border-blue-200">
                               Đã tham gia
                             </span>
                           )}
@@ -500,15 +500,15 @@ export default function CreatePostView({ setActiveTab }) {
             </div>
           </div>
 
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-5 shadow-2xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center space-x-2">
-                <Flag className="w-4 h-4 text-emerald-400" />
-                <h3 className="font-bold text-sm text-white">Chọn Pages mục tiêu ({targetPageIds.length})</h3>
+                <Flag className="w-4 h-4 text-emerald-600" />
+                <h3 className="font-bold text-sm text-slate-900">Chọn Pages mục tiêu ({targetPageIds.length})</h3>
               </div>
               <button 
                 onClick={() => setTargetPageIds(targetPageIds.length === availablePages.length ? [] : availablePages.map(p => p.id))}
-                className="text-xs text-blue-400 hover:underline"
+                className="text-xs text-blue-600 hover:underline font-medium"
               >
                 {targetPageIds.length === availablePages.length ? 'Bỏ chọn' : 'Tất cả'}
               </button>
@@ -516,26 +516,26 @@ export default function CreatePostView({ setActiveTab }) {
 
             <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
               {availablePages.length === 0 ? (
-                <p className="text-xs text-slate-500 py-3 text-center">Chưa có trang nào trong DB.</p>
+                <p className="text-xs text-slate-400 py-3 text-center">Chưa có trang nào trong DB.</p>
               ) : (
                 availablePages.map(pg => (
                   <label 
                     key={pg.id} 
-                    className={`flex items-start space-x-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                    className={`flex items-start space-x-2 p-2.5 rounded-xl border text-xs cursor-pointer transition ${
                       targetPageIds.includes(pg.id) 
-                        ? 'bg-emerald-600/10 border-emerald-500/40 text-white' 
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
+                        ? 'bg-emerald-50/80 border-emerald-300 text-slate-900 shadow-2xs' 
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:border-slate-300'
                     }`}
                   >
                     <input
                       type="checkbox"
                       checked={targetPageIds.includes(pg.id)}
                       onChange={() => toggleTargetPage(pg.id)}
-                      className="rounded bg-slate-800 border-slate-700 text-emerald-600 mt-0.5"
+                      className="rounded border-slate-300 text-emerald-600 mt-0.5"
                     />
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{pg.name}</div>
-                      <div className="text-[11px] text-slate-400">{pg.followers || 'N/A'} • {pg.category}</div>
+                      <div className="font-semibold truncate text-slate-900">{pg.name}</div>
+                      <div className="text-[11px] text-slate-500">{pg.followers || 'N/A'} • {pg.category}</div>
                     </div>
                   </label>
                 ))
@@ -547,16 +547,16 @@ export default function CreatePostView({ setActiveTab }) {
 
       {/* AI Generator Modal */}
       {aiModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <div className="flex items-center space-x-2 text-indigo-400">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center space-x-2 text-indigo-600">
                 <Sparkles className="w-5 h-5" />
-                <h3 className="font-bold text-base text-white">AI Content Studio</h3>
+                <h3 className="font-bold text-base text-slate-900">AI Content Studio</h3>
               </div>
               <button 
                 onClick={() => setAiModalOpen(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-600"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -564,52 +564,52 @@ export default function CreatePostView({ setActiveTab }) {
 
             <div className="space-y-3 text-sm">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Chủ đề (Topic)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Chủ đề (Topic)</label>
                 <input
                   type="text"
                   value={aiTopic}
                   onChange={(e) => setAiTopic(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">Đối tượng độc giả (Audience)</label>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Đối tượng độc giả (Audience)</label>
                 <input
                   type="text"
                   value={aiAudience}
                   onChange={(e) => setAiAudience(e.target.value)}
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:bg-white"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Giọng văn (Tone)</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Giọng văn (Tone)</label>
                   <input
                     type="text"
                     value={aiTone}
                     onChange={(e) => setAiTone(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-slate-400 mb-1">Kêu gọi hành động (CTA)</label>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Kêu gọi hành động (CTA)</label>
                   <input
                     type="text"
                     value={aiCta}
                     onChange={(e) => setAiCta(e.target.value)}
-                    className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-white text-sm"
+                    className="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-slate-800 text-sm focus:outline-none focus:border-indigo-500 focus:bg-white"
                   />
                 </div>
               </div>
             </div>
 
-            <div className="pt-3 border-t border-slate-800 flex justify-end space-x-3">
+            <div className="pt-3 border-t border-slate-200 flex justify-end space-x-3">
               <button
                 type="button"
                 onClick={() => setAiModalOpen(false)}
-                className="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 text-sm"
+                className="px-4 py-2 rounded-xl text-slate-600 hover:bg-slate-100 text-sm font-medium"
               >
                 Hủy
               </button>
@@ -617,7 +617,7 @@ export default function CreatePostView({ setActiveTab }) {
                 type="button"
                 onClick={handleGenerateAI}
                 disabled={aiLoading}
-                className="inline-flex items-center space-x-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow transition"
+                className="inline-flex items-center space-x-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 text-white rounded-xl text-sm font-semibold shadow transition"
               >
                 {aiLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                 <span>Generate with AI</span>
@@ -629,33 +629,33 @@ export default function CreatePostView({ setActiveTab }) {
 
       {/* Preview Modal */}
       {previewModal && (
-        <div className="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h3 className="font-bold text-base text-white">Xem trước hiển thị trên Facebook (Preview)</h3>
-              <button onClick={() => setPreviewModal(false)} className="text-slate-400 hover:text-white">
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl w-full max-w-lg p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="font-bold text-base text-slate-900">Xem trước hiển thị trên Facebook (Preview)</h3>
+              <button onClick={() => setPreviewModal(false)} className="text-slate-400 hover:text-slate-600">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
             {/* Facebook Post Mock Card */}
-            <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 space-y-3">
               <div className="flex items-center space-x-3">
                 <div className="w-10 h-10 rounded-full bg-blue-600 flex items-center justify-center font-bold text-white">
                   FB
                 </div>
                 <div>
-                  <div className="font-bold text-sm text-white">Tài khoản của bạn</div>
-                  <div className="text-xs text-slate-400">Vừa xong • 🌐 Công khai</div>
+                  <div className="font-bold text-sm text-slate-900">Tài khoản của bạn</div>
+                  <div className="text-xs text-slate-500">Vừa xong • 🌐 Công khai</div>
                 </div>
               </div>
 
-              <div className="text-sm text-slate-200 whitespace-pre-wrap leading-relaxed">
+              <div className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">
                 {content || title || 'Chưa có nội dung bài viết.'}
               </div>
 
               {imageUrl && (
-                <div className="rounded-lg overflow-hidden border border-slate-800">
+                <div className="rounded-lg overflow-hidden border border-slate-200">
                   <img src={imageUrl} alt="Post preview" className="w-full max-h-72 object-cover" />
                 </div>
               )}
@@ -665,7 +665,7 @@ export default function CreatePostView({ setActiveTab }) {
               <button
                 type="button"
                 onClick={() => setPreviewModal(false)}
-                className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl text-sm font-medium transition"
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
               >
                 Đóng
               </button>

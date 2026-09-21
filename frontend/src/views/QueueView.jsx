@@ -85,8 +85,8 @@ export default function QueueView() {
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Hàng đợi Tự động hóa (Automation Queue)</h2>
-          <p className="text-slate-400 text-sm mt-1">Quản lý và giám sát tiến độ đăng bài tuần tự, an toàn.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Hàng đợi Tự động hóa (Automation Queue)</h2>
+          <p className="text-slate-500 text-sm mt-1">Quản lý và giám sát tiến độ đăng bài tuần tự, an toàn.</p>
         </div>
 
         {/* Control Buttons */}
@@ -128,14 +128,14 @@ export default function QueueView() {
 
       {/* Checkpoint / Action Required Banner */}
       {queue.status === 'ACTION_REQUIRED' && (
-        <div className="bg-red-500/20 border-2 border-red-500 rounded-2xl p-6 space-y-3">
+        <div className="bg-red-50 border-2 border-red-300 rounded-2xl p-6 space-y-3 shadow-2xs">
           <div className="flex items-center space-x-3">
-            <AlertTriangle className="w-6 h-6 text-red-400" />
-            <h3 className="text-lg font-bold text-red-100">
+            <AlertTriangle className="w-6 h-6 text-red-600" />
+            <h3 className="text-lg font-bold text-red-900">
               Facebook requires manual verification. Please complete verification in the browser.
             </h3>
           </div>
-          <p className="text-sm text-red-200 leading-relaxed">
+          <p className="text-sm text-red-700 leading-relaxed">
             Phát hiện Checkpoint hoặc CAPTCHA bảo mật từ Facebook. Toàn bộ tác vụ tự động đã được dừng tạm thời.
             Hệ thống <b>không tự động bypass CAPTCHA hay checkpoint</b> để đảm bảo an toàn tuyệt đối cho tài khoản.
           </p>
@@ -149,7 +149,7 @@ export default function QueueView() {
             </button>
             <button
               onClick={handleResume}
-              className="inline-flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white text-sm font-semibold rounded-xl border border-slate-700 transition"
+              className="inline-flex items-center space-x-2 px-4 py-2 bg-white hover:bg-slate-50 text-slate-800 text-sm font-semibold rounded-xl border border-slate-300 shadow-2xs transition"
             >
               <RotateCw className="w-4 h-4" />
               <span>Đã xác minh xong, tiếp tục</span>
@@ -159,41 +159,41 @@ export default function QueueView() {
       )}
 
       {/* Main Status Display */}
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md space-y-6">
+      <div className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-6">
         <div className="flex items-center justify-between">
           <div>
-            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Trạng thái hiện tại</div>
-            <div className="text-2xl font-black text-white mt-1 flex items-center space-x-3">
+            <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Trạng thái hiện tại</div>
+            <div className="text-2xl font-black text-slate-900 mt-1 flex items-center space-x-3">
               <span>{queue.status}</span>
-              {queue.status === 'RUNNING' && <span className="w-3 h-3 rounded-full bg-blue-500 animate-ping" />}
+              {queue.status === 'RUNNING' && <span className="w-3 h-3 rounded-full bg-blue-600 animate-ping" />}
             </div>
           </div>
 
           {queue.countdown_remaining > 0 && (
-            <div className="bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 flex items-center space-x-3">
-              <Clock className="w-5 h-5 text-amber-400 animate-spin" />
+            <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 flex items-center space-x-3">
+              <Clock className="w-5 h-5 text-amber-600 animate-spin" />
               <div>
-                <div className="text-[11px] text-slate-400 font-semibold uppercase">Giãn cách an toàn</div>
-                <div className="text-sm font-bold text-amber-300">Còn {queue.countdown_remaining} giây...</div>
+                <div className="text-[11px] text-amber-800 font-semibold uppercase">Giãn cách an toàn</div>
+                <div className="text-sm font-bold text-amber-900">Còn {queue.countdown_remaining} giây...</div>
               </div>
             </div>
           )}
         </div>
 
         {/* Message */}
-        <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-sm text-slate-300 font-mono">
+        <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-sm text-slate-700 font-mono">
           &gt; {queue.message}
         </div>
 
         {/* Progress bar */}
         <div>
-          <div className="flex justify-between text-xs text-slate-400 mb-2 font-semibold">
+          <div className="flex justify-between text-xs text-slate-500 mb-2 font-semibold">
             <span>Tiến độ tổng thể</span>
-            <span>{queue.completed + queue.failed} / {queue.total_in_queue} mục tiêu ({progressPercent}%)</span>
+            <span className="text-slate-800">{queue.completed + queue.failed} / {queue.total_in_queue} mục tiêu ({progressPercent}%)</span>
           </div>
-          <div className="w-full h-3 rounded-full bg-slate-800 overflow-hidden">
+          <div className="w-full h-3 rounded-full bg-slate-100 border border-slate-200 overflow-hidden">
             <div 
-              className="h-full bg-blue-500 transition-all duration-500 rounded-full"
+              className="h-full bg-blue-600 transition-all duration-500 rounded-full"
               style={{ width: `${progressPercent}%` }}
             />
           </div>
@@ -201,17 +201,17 @@ export default function QueueView() {
 
         {/* Counters */}
         <div className="grid grid-cols-3 gap-4 pt-2">
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center">
-            <div className="text-xs text-slate-400 font-medium">Tổng số mục tiêu</div>
-            <div className="text-2xl font-bold text-white mt-1">{queue.total_in_queue}</div>
+          <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 text-center">
+            <div className="text-xs text-slate-500 font-semibold">Tổng số mục tiêu</div>
+            <div className="text-2xl font-bold text-slate-900 mt-1">{queue.total_in_queue}</div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center">
-            <div className="text-xs text-emerald-400 font-medium">Thành công</div>
-            <div className="text-2xl font-bold text-emerald-400 mt-1">{queue.completed}</div>
+          <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-center">
+            <div className="text-xs text-emerald-700 font-semibold">Thành công</div>
+            <div className="text-2xl font-bold text-emerald-700 mt-1">{queue.completed}</div>
           </div>
-          <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-center">
-            <div className="text-xs text-rose-400 font-medium">Thất bại</div>
-            <div className="text-2xl font-bold text-rose-400 mt-1">{queue.failed}</div>
+          <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-center">
+            <div className="text-xs text-rose-700 font-semibold">Thất bại</div>
+            <div className="text-2xl font-bold text-rose-700 mt-1">{queue.failed}</div>
           </div>
         </div>
       </div>

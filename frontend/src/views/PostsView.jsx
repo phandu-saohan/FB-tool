@@ -67,17 +67,17 @@ export default function PostsView({ setActiveTab }) {
   const getStatusBadge = (status) => {
     switch (status) {
       case 'COMPLETED':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">HOÀN THÀNH</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200">HOÀN THÀNH</span>;
       case 'PROCESSING':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-500/20 text-blue-400 border border-blue-500/30 animate-pulse">ĐANG ĐĂNG</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-200 animate-pulse">ĐANG ĐĂNG</span>;
       case 'QUEUED':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">ĐÃ LÊN QUEUE</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">ĐÃ LÊN QUEUE</span>;
       case 'PARTIALLY_FAILED':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-500/20 text-amber-400 border border-amber-500/30">LỖI 1 PHẦN</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-700 border border-amber-200">LỖI 1 PHẦN</span>;
       case 'FAILED':
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-500/20 text-rose-400 border border-rose-500/30">THẤT BẠI</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-50 text-rose-700 border border-rose-200">THẤT BẠI</span>;
       default:
-        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-700 text-slate-300">BẢN NHÁP</span>;
+        return <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-700 border border-slate-200">BẢN NHÁP</span>;
     }
   };
 
@@ -85,14 +85,14 @@ export default function PostsView({ setActiveTab }) {
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Danh sách bài viết & Lịch sử</h2>
-          <p className="text-slate-400 text-sm mt-1">Quản lý nội dung bài viết, mục tiêu đăng và trạng thái xuất bản.</p>
+          <h2 className="text-2xl font-bold text-slate-900">Danh sách bài viết & Lịch sử</h2>
+          <p className="text-slate-500 text-sm mt-1">Quản lý nội dung bài viết, mục tiêu đăng và trạng thái xuất bản.</p>
         </div>
 
         <div className="flex items-center space-x-3">
           <button
             onClick={loadPosts}
-            className="p-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 transition"
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-900 shadow-2xs transition"
             title="Tải lại"
           >
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
@@ -109,20 +109,20 @@ export default function PostsView({ setActiveTab }) {
 
       <div className="space-y-4">
         {posts.length === 0 ? (
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-12 text-center text-slate-500">
+          <div className="bg-white border border-slate-200/80 rounded-2xl p-12 text-center text-slate-500 shadow-2xs">
             {loading ? 'Đang tải danh sách bài viết...' : 'Chưa có bài viết nào. Hãy bấm "Tạo bài viết mới" để bắt đầu.'}
           </div>
         ) : (
           <>
             {paginatedItems.map(post => (
-              <div key={post.id} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-md space-y-4">
+              <div key={post.id} className="bg-white border border-slate-200/80 rounded-2xl p-6 shadow-2xs space-y-4">
                 <div className="flex items-start justify-between">
                   <div>
                     <div className="flex items-center space-x-3">
-                      <h3 className="text-lg font-bold text-white">{post.title}</h3>
+                      <h3 className="text-lg font-bold text-slate-900">{post.title}</h3>
                       {getStatusBadge(post.status)}
                     </div>
-                    <div className="text-xs text-slate-400 mt-1">
+                    <div className="text-xs text-slate-500 mt-1">
                       Tạo lúc: {new Date(post.created_at).toLocaleString('vi-VN')} • {post.targets?.length || 0} mục tiêu
                     </div>
                   </div>
@@ -137,7 +137,7 @@ export default function PostsView({ setActiveTab }) {
                     </button>
                     <button
                       onClick={() => handleDelete(post.id)}
-                      className="p-1.5 bg-slate-800 hover:bg-rose-600/30 hover:text-rose-400 text-slate-400 rounded-lg transition"
+                      className="p-1.5 bg-slate-100 hover:bg-rose-50 hover:text-rose-600 text-slate-500 rounded-lg transition border border-slate-200"
                       title="Xóa bài viết"
                     >
                       <Trash2 className="w-4 h-4" />
@@ -146,26 +146,26 @@ export default function PostsView({ setActiveTab }) {
                 </div>
 
                 {/* Content preview */}
-                <div className="bg-slate-950/60 border border-slate-800/80 rounded-xl p-4 text-sm text-slate-300 whitespace-pre-wrap max-h-36 overflow-y-auto">
+                <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 text-sm text-slate-700 whitespace-pre-wrap max-h-36 overflow-y-auto">
                   {post.content}
                 </div>
 
                 {/* Targets Breakdown */}
                 {post.targets && post.targets.length > 0 && (
                   <div>
-                    <div className="text-xs font-semibold text-slate-400 uppercase mb-2">Tiến độ theo từng mục tiêu:</div>
+                    <div className="text-xs font-semibold text-slate-500 uppercase mb-2">Tiến độ theo từng mục tiêu:</div>
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                       {post.targets.map(t => (
-                        <div key={t.id} className="bg-slate-950 border border-slate-800/60 rounded-lg p-2.5 text-xs flex items-center justify-between">
+                        <div key={t.id} className="bg-slate-50 border border-slate-200 rounded-lg p-2.5 text-xs flex items-center justify-between">
                           <div className="min-w-0 pr-2">
-                            <div className="font-semibold text-slate-300 truncate">{t.target_url}</div>
-                            <div className="text-[10px] text-slate-400 capitalize">{t.target_type}</div>
+                            <div className="font-semibold text-slate-800 truncate">{t.target_url}</div>
+                            <div className="text-[10px] text-slate-500 capitalize">{t.target_type}</div>
                           </div>
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            t.status === 'SUCCESS' ? 'bg-emerald-500/20 text-emerald-400' :
-                            t.status === 'FAILED' ? 'bg-rose-500/20 text-rose-400' :
-                            t.status === 'ACTION_REQUIRED' ? 'bg-amber-500/20 text-amber-400' :
-                            'bg-slate-800 text-slate-400'
+                            t.status === 'SUCCESS' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                            t.status === 'FAILED' ? 'bg-rose-50 text-rose-700 border border-rose-200' :
+                            t.status === 'ACTION_REQUIRED' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                            'bg-slate-200 text-slate-600'
                           }`}>
                             {t.status}
                           </span>
@@ -177,14 +177,14 @@ export default function PostsView({ setActiveTab }) {
               </div>
             ))}
 
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-2xs">
               <Pagination
                 totalItems={totalItems}
                 currentPage={currentPage}
                 pageSize={pageSize}
                 onPageChange={setCurrentPage}
                 onPageSizeChange={setPageSize}
-                darkMode={true}
+                darkMode={false}
               />
             </div>
           </>
