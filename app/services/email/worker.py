@@ -134,15 +134,19 @@ class EmailWorker:
         template_text: str,
         recipient_name: Optional[str],
         recipient_email: str,
-        campaign_name: str
+        campaign_name: str,
+        recipient_phone: Optional[str] = None
     ) -> str:
         if not template_text:
             return ""
         name = recipient_name or recipient_email.split("@")[0]
+        phone = recipient_phone or ""
         text = template_text.replace("{{name}}", name)
         text = text.replace("{{email}}", recipient_email)
+        text = text.replace("{{phone}}", phone)
         text = text.replace("{{campaign}}", campaign_name)
         return text
+
 
     @staticmethod
     def build_cta_with_utm(base_url: str, campaign_name: str, recipient_id: int) -> str:
@@ -262,20 +266,24 @@ class EmailWorker:
             campaign.content_html or "",
             recipient.name,
             recipient.email,
-            campaign.name
+            campaign.name,
+            recipient.phone
         )
         body_plain = self.personalize_content(
             campaign.content_plain or "",
             recipient.name,
             recipient.email,
-            campaign.name
+            campaign.name,
+            recipient.phone
         )
         subject = self.personalize_content(
             campaign.subject,
             recipient.name,
             recipient.email,
-            campaign.name
+            campaign.name,
+            recipient.phone
         )
+
 
         # Inject UTM into CTA URL if present
         if campaign.cta_url:

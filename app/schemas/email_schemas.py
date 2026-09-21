@@ -70,10 +70,19 @@ class CampaignResponse(BaseModel):
 class RecipientCreate(BaseModel):
     email: str
     name: Optional[str] = None
+    phone: Optional[str] = None
     contact_id: Optional[str] = None
 
 class BatchRecipientsImport(BaseModel):
     recipients: List[RecipientCreate]
+
+class ExcelImportResult(BaseModel):
+    success: bool
+    imported_count: int
+    skipped_count: int
+    invalid_count: int
+    zalo_ready_count: int
+    message: str
 
 class RecipientResponse(BaseModel):
     id: int
@@ -81,6 +90,7 @@ class RecipientResponse(BaseModel):
     contact_id: Optional[str] = None
     email: str
     name: Optional[str] = None
+    phone: Optional[str] = None
     status: str
     attempt_count: int
     last_attempt_at: Optional[datetime] = None
@@ -92,6 +102,7 @@ class RecipientResponse(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class QueueItemResponse(BaseModel):
     id: int

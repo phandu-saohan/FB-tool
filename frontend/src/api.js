@@ -85,7 +85,14 @@ export const createEmailCampaign = (data) => api.post('/email/campaigns', data);
 export const updateEmailCampaign = (id, data) => api.put(`/email/campaigns/${id}`, data);
 export const deleteEmailCampaign = (id) => api.delete(`/email/campaigns/${id}`);
 export const importCampaignRecipients = (id, data) => api.post(`/email/campaigns/${id}/recipients`, data);
+export const downloadEmailExcelTemplate = () => api.get('/email/template-excel', { responseType: 'blob' });
+export const uploadCampaignExcel = (id, formData) => api.post(`/email/campaigns/${id}/upload-excel`, formData, {
+  headers: { 'Content-Type': 'multipart/form-data' },
+  timeout: 300000
+});
+export const exportCampaignZaloOA = (id) => api.get(`/email/campaigns/${id}/export-zalo-oa`, { responseType: 'blob' });
 export const getCampaignRecipients = (id, params) => api.get(`/email/campaigns/${id}/recipients`, { params });
+
 export const startEmailCampaign = (id) => api.post(`/email/campaigns/${id}/start`);
 export const pauseEmailCampaign = (id) => api.post(`/email/campaigns/${id}/pause`);
 export const resumeEmailCampaign = (id) => api.post(`/email/campaigns/${id}/resume`);

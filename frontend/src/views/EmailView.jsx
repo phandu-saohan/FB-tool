@@ -26,7 +26,11 @@ import {
   Power,
   Server,
   ArrowRightLeft,
-  CheckCircle2
+  CheckCircle2,
+  Phone,
+  MessageSquare,
+  Download,
+  Sparkles
 } from 'lucide-react';
 import {
   getEmailDashboard,
@@ -57,9 +61,13 @@ import {
   deleteEmailAccount,
   toggleEmailAccountActive,
   testEmailAccountConnection,
-  resetEmailAccountCircuitBreaker
+  resetEmailAccountCircuitBreaker,
+  exportCampaignZaloOA
 } from '../api';
 import Pagination, { usePagination } from '../components/Pagination';
+import ExcelUploadModal from '../components/ExcelUploadModal';
+import EmailRichEditor from '../components/EmailRichEditor';
+
 
 export default function EmailView() {
   const [activeSubTab, setActiveSubTab] = useState('dashboard');
@@ -115,6 +123,11 @@ export default function EmailView() {
   const [showRecipientsModal, setShowRecipientsModal] = useState(false);
   const [recipientsList, setRecipientsList] = useState([]);
   const paginatedRecipients = usePagination(recipientsList, 15);
+
+  // Excel & Zalo OA States
+  const [showExcelModal, setShowExcelModal] = useState(false);
+  const [selectedCampaignForExcel, setSelectedCampaignForExcel] = useState(null);
+
 
   // Form states
   const [newCampaign, setNewCampaign] = useState({
@@ -320,6 +333,34 @@ export default function EmailView() {
       showNotification('Lỗi tải danh sách người nhận: ' + err.message, true);
     }
   };
+
+  const handleOpenExcelModal = (camp) => {
+    setSelectedCampaignForExcel(camp);
+    setShowExcelModal(true);
+  };
+
+  const handleExportZalo = async (campaignId, campaignName) => {
+    try {
+      showNotification('Đang tạo và tải file Excel Zalo OA...');
+      const res = await exportCampaignZaloOA(campaignId);
+      const blob = new Blob([res.data], {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+      });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      const safeName = (campaignName || `campaign_${campaignId}`).replace(/[^a-zA-Z0-9_\-]/g, '_');
+      link.setAttribute('download', `zalo_oa_${safeName}.xlsx`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      showNotification('Đã xuất file Zalo OA thành công!');
+    } catch (err) {
+      showNotification('Lỗi xuất file Zalo OA: ' + (err.response?.data?.detail || err.message), true);
+    }
+  };
+
 
   const handleProcessBatchNow = async () => {
     try {
@@ -827,21 +868,28 @@ export default function EmailView() {
                         )}
 
                         <button
-                          onClick={() => {
-                            setSelectedCampaignId(camp.id);
-                            setShowImportModal(true);
-                          }}
-                          className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded flex items-center gap-1"
+                          onClick={() => handleOpenExcelModal(camp)}
+                          className="px-3 py-1.5 bg-emerald-50 border border-emerald-300 hover:bg-emerald-100 text-emerald-700 text-xs font-semibold rounded-lg flex items-center gap-1 shadow-2xs transition"
+                          title="Nhập danh sách từ file Excel 3 cột (Tên, Email, SĐT Zalo)"
                         >
-                          <UserPlus className="w-3.5 h-3.5" /> Nạp Contacts
+                          <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" /> Nhập Excel (3 cột)
+                        </button>
+
+                        <button
+                          onClick={() => handleExportZalo(camp.id, camp.name)}
+                          className="px-2.5 py-1.5 bg-blue-50 border border-blue-200 hover:bg-blue-100 text-blue-700 text-xs font-semibold rounded-lg flex items-center gap-1 shadow-2xs transition"
+                          title="Xuất file Excel số điện thoại chuẩn Zalo OA"
+                        >
+                          <Phone className="w-3.5 h-3.5 text-blue-600" /> Xuất Zalo OA
                         </button>
 
                         <button
                           onClick={() => handleViewRecipients(camp.id)}
-                          className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded flex items-center gap-1"
+                          className="px-3 py-1.5 bg-white border border-slate-300 hover:bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg flex items-center gap-1 transition"
                         >
                           <Users className="w-3.5 h-3.5" /> Chi tiết
                         </button>
+
                       </div>
                     </div>
                   );
@@ -937,14 +985,18 @@ export default function EmailView() {
                           </button>
                         )}
                         <button
-                          onClick={() => {
-                            setSelectedCampaignId(c.id);
-                            setShowImportModal(true);
-                          }}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                          title="Nạp người nhận"
+                          onClick={() => handleOpenExcelModal(c)}
+                          className="p-1.5 text-emerald-600 hover:bg-emerald-50 rounded"
+                          title="Nhập danh sách từ Excel (3 cột: Tên, Email, SĐT Zalo)"
                         >
-                          <UserPlus className="w-4 h-4" />
+                          <FileSpreadsheet className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleExportZalo(c.id, c.name)}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                          title="Xuất file Excel SĐT chuẩn Zalo OA"
+                        >
+                          <Phone className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => handleViewRecipients(c.id)}
@@ -960,6 +1012,7 @@ export default function EmailView() {
                         >
                           <Trash2 className="w-4 h-4" />
                         </button>
+
                       </td>
                     </tr>
                   ))
@@ -1790,9 +1843,12 @@ export default function EmailView() {
       {/* MODAL: CREATE CAMPAIGN */}
       {showCreateModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-4 border border-slate-200">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-800 text-base">Soạn Chiến dịch Email Mới</h3>
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Soạn Chiến dịch Email Chuyên nghiệp</h3>
+                <p className="text-xs text-slate-500">Tích hợp bộ soạn thảo Rich Text cao cấp, kho template mẫu & Live Preview Desktop/Mobile</p>
+              </div>
               <button onClick={() => setShowCreateModal(false)} className="text-slate-400 hover:text-slate-600">
                 <XCircle className="w-5 h-5" />
               </button>
@@ -1800,58 +1856,61 @@ export default function EmailView() {
 
             <form onSubmit={handleCreateCampaign} className="space-y-4">
               <div>
-                <label className="text-xs font-semibold text-slate-700">Tên chiến dịch</label>
+                <label className="text-xs font-semibold text-slate-700">Tên chiến dịch *</label>
                 <input
                   type="text"
                   required
                   value={newCampaign.name}
                   onChange={(e) => setNewCampaign({ ...newCampaign, name: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                  className="w-full mt-1 p-2.5 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  placeholder="Ví dụ: Hội nghị Thẩm mỹ Quốc tế 2026 - Thư Mời VIP"
                 />
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">Tiêu đề email (Subject)</label>
+                <label className="text-xs font-semibold text-slate-700">Tiêu đề email (Subject) *</label>
                 <input
                   type="text"
                   required
                   value={newCampaign.subject}
                   onChange={(e) => setNewCampaign({ ...newCampaign, subject: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                  className="w-full mt-1 p-2.5 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 outline-hidden"
+                  placeholder="Hỗ trợ biến: {{name}}, {{phone}}, {{email}}"
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Tên người gửi (From Name)</label>
+                  <label className="text-xs font-semibold text-slate-700">Tên người gửi (From Name) *</label>
                   <input
                     type="text"
                     required
                     value={newCampaign.from_name}
                     onChange={(e) => setNewCampaign({ ...newCampaign, from_name: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Email người gửi (From Email)</label>
+                  <label className="text-xs font-semibold text-slate-700">Email người gửi (From Email) *</label>
                   <input
                     type="email"
                     required
                     value={newCampaign.from_email}
                     onChange={(e) => setNewCampaign({ ...newCampaign, from_email: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
                   />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-semibold text-slate-700">Nút kêu gọi hành động (CTA Text)</label>
                   <input
                     type="text"
                     value={newCampaign.cta_text}
                     onChange={(e) => setNewCampaign({ ...newCampaign, cta_text: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                    placeholder="Ví dụ: Xác Nhận Tham Dự Ngay"
                   />
                 </div>
                 <div>
@@ -1860,22 +1919,27 @@ export default function EmailView() {
                     type="url"
                     value={newCampaign.cta_url}
                     onChange={(e) => setNewCampaign({ ...newCampaign, cta_url: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs font-mono"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs font-mono"
+                    placeholder="https://aesthetichub.vn/register"
                   />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-slate-700">
-                  Nội dung HTML (Hỗ trợ thẻ cá nhân hóa: <code>&#123;&#123;name&#125;&#125;</code>, <code>&#123;&#123;email&#125;&#125;</code>)
+                <label className="text-xs font-semibold text-slate-700 mb-1 flex items-center justify-between">
+                  <span>Nội dung Email Chuyên nghiệp (HTML Studio & Templates)</span>
+                  <span className="text-[11px] text-blue-600 font-medium">Bấm "Kho Mẫu Email" để chọn mẫu thiết kế sẵn</span>
                 </label>
-                <textarea
-                  rows="6"
-                  value={newCampaign.content_html}
-                  onChange={(e) => setNewCampaign({ ...newCampaign, content_html: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs font-mono"
-                ></textarea>
+                <EmailRichEditor
+                  contentHtml={newCampaign.content_html}
+                  onChangeHtml={(html) => setNewCampaign({ ...newCampaign, content_html: html })}
+                  subject={newCampaign.subject}
+                  onChangeSubject={(sub) => setNewCampaign({ ...newCampaign, subject: sub })}
+                  previewText={newCampaign.preview_text}
+                  onChangePreviewText={(pt) => setNewCampaign({ ...newCampaign, preview_text: pt })}
+                />
               </div>
+
 
               <div className="flex justify-end gap-3 pt-3 border-t">
                 <button
@@ -1953,12 +2017,36 @@ export default function EmailView() {
       {/* MODAL: VIEW RECIPIENTS */}
       {showRecipientsModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-3xl w-full max-h-[85vh] flex flex-col p-6 space-y-4">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="font-bold text-slate-800 text-base">Danh sách người nhận (Chiến dịch #{selectedCampaignId})</h3>
-              <button onClick={() => setShowRecipientsModal(false)} className="text-slate-400 hover:text-slate-600">
-                <XCircle className="w-5 h-5" />
-              </button>
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full max-h-[85vh] flex flex-col p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b pb-3">
+              <div>
+                <h3 className="font-bold text-slate-800 text-base">Danh sách người nhận (Chiến dịch #{selectedCampaignId})</h3>
+                <p className="text-xs text-slate-500">Quản lý người nhận email và số điện thoại đồng bộ Zalo OA</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const c = campaigns.find(x => x.id === selectedCampaignId) || { id: selectedCampaignId, name: `Chiến dịch #${selectedCampaignId}` };
+                    handleOpenExcelModal(c);
+                  }}
+                  className="px-3 py-1.5 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-600" />
+                  Nhập thêm từ Excel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleExportZalo(selectedCampaignId)}
+                  className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200 rounded text-xs font-semibold flex items-center gap-1.5 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5 text-blue-600" />
+                  Xuất Zalo OA (.xlsx)
+                </button>
+                <button onClick={() => setShowRecipientsModal(false)} className="text-slate-400 hover:text-slate-600 ml-2">
+                  <XCircle className="w-5 h-5" />
+                </button>
+              </div>
             </div>
 
             <div className="overflow-y-auto flex-1">
@@ -1967,6 +2055,7 @@ export default function EmailView() {
                   <tr>
                     <th className="p-2.5">Email</th>
                     <th className="p-2.5">Họ tên</th>
+                    <th className="p-2.5">Số ĐT (Zalo OA)</th>
                     <th className="p-2.5">Trạng thái</th>
                     <th className="p-2.5">Số lần gửi</th>
                     <th className="p-2.5">Thời gian gửi</th>
@@ -1976,15 +2065,27 @@ export default function EmailView() {
                 <tbody className="divide-y divide-slate-100">
                   {paginatedRecipients.totalItems === 0 ? (
                     <tr>
-                      <td colSpan="6" className="text-center py-6 text-slate-400">
-                        Chưa có người nhận nào trong chiến dịch này.
+                      <td colSpan="7" className="text-center py-6 text-slate-400">
+                        Chưa có người nhận nào trong chiến dịch này. Hãy nạp danh sách qua Excel hoặc Text.
                       </td>
                     </tr>
                   ) : (
                     paginatedRecipients.paginatedItems.map((r) => (
-                      <tr key={r.id}>
+                      <tr key={r.id} className="hover:bg-slate-50/70 transition-colors">
                         <td className="p-2.5 font-semibold text-slate-800">{r.email}</td>
                         <td className="p-2.5 text-slate-600">{r.name || '-'}</td>
+                        <td className="p-2.5">
+                          {r.phone ? (
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-medium text-slate-700">{r.phone}</span>
+                              <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-semibold">
+                                <Phone className="w-2.5 h-2.5 text-blue-600" /> Zalo
+                              </span>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 italic text-[11px]">Chưa có</span>
+                          )}
+                        </td>
                         <td className="p-2.5">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             r.status === 'SENT' ? 'bg-green-100 text-green-700' :
@@ -2019,7 +2120,7 @@ export default function EmailView() {
             <div className="flex justify-end pt-3 border-t">
               <button
                 onClick={() => setShowRecipientsModal(false)}
-                className="px-4 py-1.5 bg-slate-800 text-white rounded text-xs font-semibold"
+                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded text-xs font-semibold transition-colors"
               >
                 Đóng
               </button>
@@ -2028,6 +2129,20 @@ export default function EmailView() {
           </div>
         </div>
       )}
+
+      {/* MODAL: EXCEL 3-COLUMN IMPORT */}
+      <ExcelUploadModal
+        isOpen={showExcelModal}
+        campaignId={selectedCampaignForExcel?.id}
+        campaignName={selectedCampaignForExcel?.name}
+        onClose={() => setShowExcelModal(false)}
+        onSuccess={() => {
+          loadAllData();
+          if (showRecipientsModal && selectedCampaignId) {
+            handleViewRecipients(selectedCampaignId);
+          }
+        }}
+      />
     </div>
   );
 }

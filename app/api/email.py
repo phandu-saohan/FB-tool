@@ -1,6 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File, Response
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -27,7 +28,8 @@ from app.schemas.email_schemas import (
     EmailAccountCreate,
     EmailAccountUpdate,
     EmailAccountResponse,
-    EmailDashboardStats
+    EmailDashboardStats,
+    ExcelImportResult
 )
 from app.services.email.quota_manager import EmailQuotaManager
 from app.services.email.circuit_breaker import EmailCircuitBreaker
@@ -36,6 +38,8 @@ from app.services.email.audit_logger import EmailAuditLogger
 from app.services.email.worker import EmailWorker
 from app.services.email.providers.hostinger_smtp_provider import HostingerSMTPProvider
 from app.services.email.providers.mock_email_provider import MockEmailProvider
+from app.services.email.excel_service import ExcelContactService
+
 
 router = APIRouter(prefix="/api/email", tags=["Email Campaign Queue & Sending"])
 
@@ -267,6 +271,7 @@ def add_recipients_to_campaign(
             contact_id=item.contact_id,
             email=clean_email,
             name=item.name,
+            phone=ExcelContactService.normalize_phone(item.phone),
             status="QUEUED"
         )
         db.add(recipient)
@@ -299,6 +304,128 @@ def add_recipients_to_campaign(
         "skipped_duplicates": skipped_duplicates,
         "total_recipients": campaign.total_recipients
     }
+
+@router.get("/template-excel")
+def download_sample_excel():
+    """Returns sample Excel template with 3 columns: Tên, Email, Số điện thoại"""
+    buf = ExcelContactService.generate_sample_template()
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=mau_danh_sach_email_sdt.xlsx"}
+    )
+
+@router.post("/campaigns/{campaign_id}/upload-excel", response_model=ExcelImportResult)
+async def upload_campaign_excel(
+    campaign_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db)
+):
+    """Uploads and imports Excel (.xlsx, .xls) or CSV file with 3 columns: Tên, Email, Số điện thoại"""
+    campaign = db.query(EmailCampaign).filter_by(id=campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chiến dịch email")
+
+    filename = file.filename or "contacts.xlsx"
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="File rỗng, vui lòng kiểm tra lại.")
+
+    contacts, parse_errors = ExcelContactService.parse_contacts_file(file_bytes, filename)
+    if not contacts and parse_errors:
+        raise HTTPException(status_code=400, detail=f"Không thể đọc danh sách: {'; '.join(parse_errors[:3])}")
+
+    added_count = 0
+    skipped_duplicates = 0
+    zalo_ready_count = 0
+
+    for item in contacts:
+        clean_email = item["email"]
+        phone = item.get("phone")
+        name = item.get("name")
+
+        # Check existing in this campaign
+        existing = db.query(EmailCampaignRecipient).filter_by(
+            campaign_id=campaign_id, email=clean_email
+        ).first()
+
+        if existing:
+            # If exists but didn't have phone, update phone
+            if phone and not existing.phone:
+                existing.phone = phone
+                if name and not existing.name:
+                    existing.name = name
+                zalo_ready_count += 1
+            skipped_duplicates += 1
+            continue
+
+        recipient = EmailCampaignRecipient(
+            campaign_id=campaign_id,
+            email=clean_email,
+            name=name,
+            phone=phone,
+            status="QUEUED"
+        )
+        db.add(recipient)
+        db.flush()
+
+        job = EmailJob(
+            campaign_id=campaign_id,
+            recipient_id=recipient.id,
+            status="PENDING",
+            available_at=datetime.utcnow()
+        )
+        db.add(job)
+        added_count += 1
+        if phone:
+            zalo_ready_count += 1
+
+    campaign.total_recipients = (campaign.total_recipients or 0) + added_count
+    campaign.queued_count = (campaign.queued_count or 0) + added_count
+    campaign.remaining_count = (campaign.remaining_count or 0) + added_count
+    db.commit()
+
+    EmailAuditLogger.log(
+        db, action="IMPORT_EXCEL", campaign_id=campaign_id,
+        metadata={"filename": filename, "added": added_count, "zalo_ready": zalo_ready_count}
+    )
+
+    return ExcelImportResult(
+        success=True,
+        imported_count=added_count,
+        skipped_count=skipped_duplicates,
+        invalid_count=len(parse_errors),
+        zalo_ready_count=zalo_ready_count,
+        message=f"Đã nạp thành công {added_count} liên hệ từ Excel. {zalo_ready_count} số điện thoại sẵn sàng cho Zalo OA ({skipped_duplicates} email trùng lặp)."
+    )
+
+@router.get("/campaigns/{campaign_id}/export-zalo-oa")
+def export_campaign_zalo_oa(
+    campaign_id: int,
+    db: Session = Depends(get_db)
+):
+    """Exports all recipients with phone numbers into a specialized Excel format for Zalo OA Broadcast"""
+    campaign = db.query(EmailCampaign).filter_by(id=campaign_id).first()
+    if not campaign:
+        raise HTTPException(status_code=404, detail="Không tìm thấy chiến dịch email")
+
+    recipients = db.query(EmailCampaignRecipient).filter(
+        EmailCampaignRecipient.campaign_id == campaign_id,
+        EmailCampaignRecipient.phone.isnot(None)
+    ).all()
+
+    if not recipients:
+        raise HTTPException(status_code=400, detail="Chiến dịch này chưa có số điện thoại nào được nạp.")
+
+    import re
+    buf = ExcelContactService.export_zalo_oa_contacts(campaign.name, recipients)
+    safe_name = re.sub(r'[^a-zA-Z0-9_\-]', '_', campaign.name)[:30]
+    return StreamingResponse(
+        buf,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f"attachment; filename=zalo_oa_{safe_name}_{campaign_id}.xlsx"}
+    )
+
 
 @router.get("/campaigns/{campaign_id}/recipients", response_model=List[RecipientResponse])
 def get_campaign_recipients(

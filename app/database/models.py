@@ -297,8 +297,10 @@ class EmailCampaignRecipient(Base):
 
     email = Column(String(255), nullable=False, index=True)
     name = Column(String(255), nullable=True)
+    phone = Column(String(50), nullable=True, index=True)
 
     status = Column(String(50), default='QUEUED', index=True)  # QUEUED, PROCESSING, SENT, FAILED, RETRY, SKIPPED, BOUNCED, UNSUBSCRIBED
+
 
     attempt_count = Column(Integer, default=0)
     last_attempt_at = Column(DateTime, nullable=True)
