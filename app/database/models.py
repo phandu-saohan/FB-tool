@@ -374,6 +374,9 @@ class EmailProviderSetting(Base):
     __tablename__ = 'email_provider_settings'
 
     id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), default='Tài khoản mặc định')
+    is_active = Column(Boolean, default=True)
+    priority = Column(Integer, default=1)
     provider_name = Column(String(50), default='MockEmailProvider')  # Hostinger, MockEmailProvider, etc.
     smtp_host = Column(String(255), default='smtp.hostinger.com')
     smtp_port = Column(Integer, default=465)

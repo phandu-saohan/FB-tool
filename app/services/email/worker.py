@@ -41,11 +41,10 @@ class EmailWorker:
         self.enable_delay = enable_delay
         self.is_running = False
 
-    def get_provider(self, session: Session) -> EmailProvider:
+    def get_provider_for_setting(self, setting: Optional[EmailProviderSetting] = None) -> EmailProvider:
         if self.provider:
             return self.provider
 
-        setting = session.query(EmailProviderSetting).filter_by(provider_name=self.provider_name).first()
         if setting and setting.provider_name == "MockEmailProvider":
             return MockEmailProvider(daily_limit=setting.daily_limit)
 
@@ -62,8 +61,17 @@ class EmailWorker:
                 daily_limit=setting.daily_limit
             )
 
-        # Fallback to Mock provider if nothing configured
         return MockEmailProvider()
+
+    def get_provider(self, session: Session) -> EmailProvider:
+        if self.provider:
+            return self.provider
+
+        setting = session.query(EmailProviderSetting).filter_by(provider_name=self.provider_name).first()
+        if not setting:
+            setting = session.query(EmailProviderSetting).first()
+
+        return self.get_provider_for_setting(setting)
 
     @classmethod
     def recover_stale_jobs(cls, session: Session, stale_minutes: int = 10) -> int:
@@ -162,41 +170,7 @@ class EmailWorker:
             session.commit()
             return {"status": "SKIPPED_ALREADY_SENT", "email": recipient.email}
 
-        # 2. Circuit Breaker Check
-        is_tripped, cb_reason = EmailCircuitBreaker.is_tripped(session, self.provider_name)
-        if is_tripped:
-            # Release lock, cannot send now
-            job.status = 'PENDING'
-            job.locked_at = None
-            job.locked_by = None
-            session.commit()
-            return {"status": "PAUSED_CIRCUIT_BREAKER", "reason": cb_reason}
-
-        # 3. Sending Window Check
-        setting = session.query(EmailProviderSetting).filter_by(provider_name=self.provider_name).first()
-        win_start = setting.sending_window_start if setting else "08:00"
-        win_end = setting.sending_window_end if setting else "18:00"
-        in_window, win_reason = EmailRateLimiter.is_in_sending_window(win_start, win_end)
-        
-        # Note: If forced/testing, window might be bypassed or handled
-        if not in_window and self.enable_delay:
-            job.status = 'PENDING'
-            job.locked_at = None
-            job.locked_by = None
-            session.commit()
-            return {"status": "OUTSIDE_WINDOW", "reason": win_reason}
-
-        # 4. Hourly Limit Check
-        hourly_limit = setting.hourly_limit if setting else 30
-        has_hourly_cap, hourly_count = EmailRateLimiter.check_hourly_limit(session, hourly_limit)
-        if not has_hourly_cap:
-            job.status = 'PENDING'
-            job.locked_at = None
-            job.locked_by = None
-            session.commit()
-            return {"status": "HOURLY_LIMIT_REACHED", "current_count": hourly_count}
-
-        # 5. Eligibility, Suppression & Fatigue Check
+        # 2. Eligibility, Suppression & Fatigue Check
         is_eligible, elig_reason = EmailSuppressionService.check_recipient_eligibility(
             session, recipient.email, self.provider_name
         )
@@ -213,17 +187,77 @@ class EmailWorker:
             session.commit()
             return {"status": "SKIPPED_INELIGIBLE", "reason": elig_reason, "email": recipient.email}
 
-        # 6. Atomic Quota Reservation
-        quota_reserved = EmailQuotaManager.reserve_quota(session, self.provider_name, count=1)
-        if not quota_reserved:
-            # Daily limit exhausted! Release lock and wait for tomorrow
+        # 3. Multi-Account Selection & Auto-Rotation
+        # Sắp xếp theo thứ tự ưu tiên (priority ASC, id ASC)
+        candidate_accounts = session.query(EmailProviderSetting).filter(
+            EmailProviderSetting.is_active == True
+        ).order_by(
+            EmailProviderSetting.priority.asc(),
+            EmailProviderSetting.id.asc()
+        ).all()
+
+        if not candidate_accounts:
+            fallback_setting = session.query(EmailProviderSetting).first()
+            if fallback_setting:
+                candidate_accounts = [fallback_setting]
+            else:
+                fallback_setting = EmailProviderSetting(provider_name=self.provider_name)
+                session.add(fallback_setting)
+                session.commit()
+                candidate_accounts = [fallback_setting]
+
+        selected_account = None
+        selected_provider_key = None
+        skip_reasons = []
+
+        for acc in candidate_accounts:
+            acc_key = f"account_{acc.id}"
+
+            # 3.1 Circuit Breaker check
+            if acc.is_paused:
+                skip_reasons.append(f"Account '{acc.name}' is paused ({acc.pause_reason or 'Circuit Breaker'})")
+                continue
+
+            # 3.2 Sending window check
+            if self.enable_delay:
+                in_win, win_reason = EmailRateLimiter.is_in_sending_window(
+                    acc.sending_window_start, acc.sending_window_end
+                )
+                if not in_win:
+                    skip_reasons.append(f"Account '{acc.name}' outside sending window: {win_reason}")
+                    continue
+
+            # 3.3 Hourly limit check
+            has_hourly_cap, hourly_count = EmailRateLimiter.check_hourly_limit(session, acc.hourly_limit)
+            if not has_hourly_cap:
+                skip_reasons.append(f"Account '{acc.name}' reached hourly limit ({hourly_count}/{acc.hourly_limit})")
+                continue
+
+            # 3.4 Quota check & reservation for this account
+            quota_reserved = EmailQuotaManager.reserve_quota(session, provider=acc_key, count=1)
+            if quota_reserved:
+                selected_account = acc
+                selected_provider_key = acc_key
+                break
+            else:
+                logger.info(f"[AUTO_ROTATION] Account '{acc.name}' ({acc.from_email}) daily quota exhausted. Rotating to next account...")
+                skip_reasons.append(f"Account '{acc.name}' daily quota exhausted")
+
+        if not selected_account:
+            # All accounts exhausted or unavailable today
             job.status = 'PENDING'
             job.locked_at = None
             job.locked_by = None
             session.commit()
-            return {"status": "DAILY_QUOTA_EXHAUSTED", "email": recipient.email}
+            return {
+                "status": "ALL_ACCOUNTS_QUOTA_EXHAUSTED",
+                "email": recipient.email,
+                "reasons": skip_reasons
+            }
 
-        # 7. Personalization & Content Preparation
+        provider = self.get_provider_for_setting(selected_account)
+
+        # 4. Personalization & Content Preparation
         body_html = self.personalize_content(
             campaign.content_html or "",
             recipient.name,
@@ -248,25 +282,28 @@ class EmailWorker:
             utm_url = self.build_cta_with_utm(campaign.cta_url, campaign.name, recipient.id)
             body_html = body_html.replace(campaign.cta_url, utm_url)
 
-        # 8. Send Email via Provider
+        # 5. Send Email via Selected Account
+        from_email = selected_account.from_email or campaign.from_email
+        from_name = selected_account.from_name or campaign.from_name
+
         send_result = await provider.send(
             to_email=recipient.email,
             to_name=recipient.name,
             subject=subject,
             html_content=body_html,
             plain_content=body_plain,
-            from_email=campaign.from_email,
-            from_name=campaign.from_name,
-            reply_to=campaign.reply_to
+            from_email=from_email,
+            from_name=from_name,
+            reply_to=selected_account.reply_to or campaign.reply_to
         )
 
         now_time = datetime.utcnow()
 
-        # 9. Handle Result
+        # 6. Handle Result
         if send_result.success:
-            # Succeeded! Commit quota permanently
-            EmailQuotaManager.commit_quota(session, self.provider_name, count=1)
-            EmailCircuitBreaker.record_success(session, self.provider_name)
+            # Succeeded! Commit quota permanently on the selected account
+            EmailQuotaManager.commit_quota(session, selected_provider_key, count=1)
+            EmailCircuitBreaker.record_success(session, selected_account.provider_name)
 
             recipient.status = 'SENT'
             recipient.sent_at = now_time
@@ -290,19 +327,21 @@ class EmailWorker:
 
             # Jitter delay between emails
             if self.enable_delay:
-                min_d = campaign.min_delay_seconds or (setting.min_delay_seconds if setting else 15)
-                max_d = campaign.max_delay_seconds or (setting.max_delay_seconds if setting else 45)
+                min_d = campaign.min_delay_seconds or selected_account.min_delay_seconds or 15
+                max_d = campaign.max_delay_seconds or selected_account.max_delay_seconds or 45
                 delay_sec = EmailRateLimiter.get_jitter_delay(min_d, max_d)
-                logger.info(f"Email sent to {recipient.email}. Jitter delay: {delay_sec}s")
+                logger.info(f"Email sent to {recipient.email} via {selected_account.name}. Jitter delay: {delay_sec}s")
                 await asyncio.sleep(delay_sec)
 
-            return {"status": "SENT", "email": recipient.email, "message_id": send_result.message_id}
+            return {
+                "status": "SENT",
+                "email": recipient.email,
+                "message_id": send_result.message_id,
+                "sender_account": selected_account.name
+            }
 
         else:
-            # Failed! Release reserved quota
-            EmailQuotaManager.release_quota(session, self.provider_name, count=1)
-            EmailCircuitBreaker.record_failure(session, self.provider_name, send_result.error_message or "")
-
+            # Failed! Handle bounce or retry
             job.attempts += 1
             recipient.attempt_count += 1
             recipient.last_attempt_at = now_time
@@ -312,6 +351,7 @@ class EmailWorker:
 
             # Check if permanent error (5xx or known bounce)
             if not send_result.is_temporary:
+                EmailQuotaManager.commit_quota(session, selected_provider_key, count=1)
                 recipient.status = 'BOUNCED'
                 job.status = 'FAILED'
                 job.locked_at = None
@@ -328,7 +368,11 @@ class EmailWorker:
                 return {"status": "BOUNCED_PERMANENT", "email": recipient.email, "error": send_result.error_message}
 
             else:
-                # Temporary error -> Exponential Retry Policy
+                # Temporary error -> release reserved quota
+                EmailQuotaManager.release_quota(session, selected_provider_key, count=1)
+                EmailCircuitBreaker.record_failure(session, selected_account.provider_name, send_result.error_message or "")
+
+                # Exponential Retry Policy
                 if job.attempts < 5:
                     delay_idx = min(job.attempts - 1, len(RETRY_DELAYS_MINUTES) - 1)
                     retry_minutes = RETRY_DELAYS_MINUTES[delay_idx]
@@ -368,6 +412,6 @@ class EmailWorker:
                 results.append(res)
 
                 # If quota exhausted or circuit breaker tripped or outside window, halt batch
-                if res.get("status") in ["DAILY_QUOTA_EXHAUSTED", "PAUSED_CIRCUIT_BREAKER", "OUTSIDE_WINDOW", "HOURLY_LIMIT_REACHED"]:
+                if res.get("status") in ["DAILY_QUOTA_EXHAUSTED", "ALL_ACCOUNTS_QUOTA_EXHAUSTED", "PAUSED_CIRCUIT_BREAKER", "OUTSIDE_WINDOW", "HOURLY_LIMIT_REACHED"]:
                     break
         return results

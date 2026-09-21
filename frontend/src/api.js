@@ -101,4 +101,14 @@ export const testEmailSmtpConnection = () => api.post('/email/settings/test-conn
 export const resetEmailCircuitBreaker = () => api.post('/email/circuit-breaker/reset');
 export const getEmailAuditLogs = (limit = 50) => api.get('/email/logs', { params: { limit } });
 
+// Multi-Account Sender Configurations
+export const getEmailAccounts = () => api.get('/email/accounts');
+export const createEmailAccount = (data) => api.post('/email/accounts', data);
+export const getEmailAccount = (id) => api.get(`/email/accounts/${id}`);
+export const updateEmailAccount = (id, data) => api.put(`/email/accounts/${id}`, data);
+export const deleteEmailAccount = (id) => api.delete(`/email/accounts/${id}`);
+export const toggleEmailAccountActive = (id) => api.post(`/email/accounts/${id}/toggle-active`);
+export const testEmailAccountConnection = (id) => api.post(`/email/accounts/${id}/test-connection`);
+export const resetEmailAccountCircuitBreaker = (id) => api.post(`/email/accounts/${id}/reset-circuit-breaker`);
+
 export default api;

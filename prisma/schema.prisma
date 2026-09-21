@@ -267,6 +267,9 @@ model EmailSuppression {
 
 model EmailProviderSetting {
   id                       Int      @id @default(autoincrement())
+  name                     String   @default("Tài khoản mặc định")
+  isActive                 Boolean  @default(true) @map("is_active")
+  priority                 Int      @default(1)
   providerName             String   @default("MockEmailProvider") @map("provider_name")
   smtpHost                 String   @default("smtp.hostinger.com") @map("smtp_host")
   smtpPort                 Int      @default(465) @map("smtp_port")

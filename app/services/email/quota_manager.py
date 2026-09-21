@@ -18,11 +18,24 @@ class EmailQuotaManager:
         return vn_time.strftime("%Y-%m-%d")
 
     @staticmethod
+    def _find_setting_for_provider(session: Session, provider: str) -> Optional[EmailProviderSetting]:
+        if provider.startswith("account_"):
+            try:
+                acc_id = int(provider.split("_")[1])
+                return session.query(EmailProviderSetting).filter_by(id=acc_id).first()
+            except (IndexError, ValueError):
+                pass
+        setting = session.query(EmailProviderSetting).filter_by(provider_name=provider).first()
+        if not setting:
+            setting = session.query(EmailProviderSetting).first()
+        return setting
+
+    @staticmethod
     def get_or_create_quota(session: Session, provider: str = "Hostinger", date_str: Optional[str] = None) -> EmailQuota:
         date_key = date_str or EmailQuotaManager.get_local_date_str()
         
         # Look up provider settings to get current daily limit
-        setting = session.query(EmailProviderSetting).filter_by(provider_name=provider).first()
+        setting = EmailQuotaManager._find_setting_for_provider(session, provider)
         configured_limit = setting.daily_limit if setting else 300
 
         quota = session.query(EmailQuota).filter_by(provider=provider, date=date_key).first()
@@ -52,7 +65,7 @@ class EmailQuotaManager:
         Atomically checks and reserves quota for batch sending.
         Returns True if reservation succeeded, False if limit is reached.
         """
-        setting = session.query(EmailProviderSetting).filter_by(provider_name=provider).first()
+        setting = cls._find_setting_for_provider(session, provider)
         safety_margin = setting.safety_margin_pct if setting else 10.0
         configured_limit = setting.daily_limit if setting else 300
         effective_limit = cls.get_effective_limit(configured_limit, safety_margin)
@@ -85,7 +98,7 @@ class EmailQuotaManager:
 
     @classmethod
     def get_quota_status(cls, session: Session, provider: str = "Hostinger") -> Dict[str, Any]:
-        setting = session.query(EmailProviderSetting).filter_by(provider_name=provider).first()
+        setting = cls._find_setting_for_provider(session, provider)
         safety_margin = setting.safety_margin_pct if setting else 10.0
         daily_limit = setting.daily_limit if setting else 300
         effective_limit = cls.get_effective_limit(daily_limit, safety_margin)
@@ -110,4 +123,82 @@ class EmailQuotaManager:
             "percent_used": percent_used,
             "is_exhausted": remaining <= 0,
             "resets_at": f"{date_str} 23:59:59 (+07:00)"
+        }
+
+    @classmethod
+    def get_account_quota_status(cls, session: Session, setting: EmailProviderSetting) -> Dict[str, Any]:
+        """Returns today's quota status for a specific email sending configuration."""
+        provider_key = f"account_{setting.id}"
+        return cls.get_quota_status(session, provider=provider_key)
+
+    @classmethod
+    def get_aggregate_quota_status(cls, session: Session) -> Dict[str, Any]:
+        """Aggregates quota across all active accounts for top-level dashboard and rotation monitoring."""
+        date_str = cls.get_local_date_str()
+        accounts = session.query(EmailProviderSetting).order_by(
+            EmailProviderSetting.priority.asc(),
+            EmailProviderSetting.id.asc()
+        ).all()
+
+        if not accounts:
+            return cls.get_quota_status(session, "Hostinger")
+
+        total_daily_limit = 0
+        total_effective_limit = 0
+        total_used = 0
+        total_reserved = 0
+        total_remaining = 0
+        account_summaries = []
+
+        active_count = 0
+        active_sender_name = None
+
+        for acc in accounts:
+            q_status = cls.get_account_quota_status(session, acc)
+            is_active_and_healthy = acc.is_active and not acc.is_paused
+
+            if is_active_and_healthy:
+                active_count += 1
+                total_daily_limit += q_status["daily_limit"]
+                total_effective_limit += q_status["effective_limit"]
+                total_used += q_status["used_count"]
+                total_reserved += q_status["reserved_count"]
+                total_remaining += q_status["remaining_count"]
+
+                if not q_status["is_exhausted"] and active_sender_name is None:
+                    active_sender_name = acc.name or acc.from_email
+
+            account_summaries.append({
+                "id": acc.id,
+                "name": acc.name,
+                "priority": acc.priority,
+                "is_active": acc.is_active,
+                "is_paused": acc.is_paused,
+                "from_email": acc.from_email,
+                "from_name": acc.from_name,
+                "daily_limit": q_status["daily_limit"],
+                "effective_limit": q_status["effective_limit"],
+                "used_count": q_status["used_count"],
+                "reserved_count": q_status["reserved_count"],
+                "remaining_count": q_status["remaining_count"],
+                "percent_used": q_status["percent_used"],
+                "is_exhausted": q_status["is_exhausted"]
+            })
+
+        percent_used = round((total_used / total_daily_limit) * 100, 1) if total_daily_limit > 0 else 0.0
+
+        return {
+            "date": date_str,
+            "total_accounts": len(accounts),
+            "active_accounts": active_count,
+            "current_active_sender": active_sender_name or "Không có (Đã hết quota hoặc tạm dừng)",
+            "daily_limit": total_daily_limit,
+            "effective_limit": total_effective_limit,
+            "used_count": total_used,
+            "reserved_count": total_reserved,
+            "remaining_count": total_remaining,
+            "percent_used": percent_used,
+            "is_exhausted": total_remaining <= 0,
+            "resets_at": f"{date_str} 23:59:59 (+07:00)",
+            "accounts_breakdown": account_summaries
         }

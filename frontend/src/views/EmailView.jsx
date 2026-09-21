@@ -21,7 +21,12 @@ import {
   BarChart3,
   Calendar,
   Layers,
-  FileSpreadsheet
+  FileSpreadsheet,
+  Edit,
+  Power,
+  Server,
+  ArrowRightLeft,
+  CheckCircle2
 } from 'lucide-react';
 import {
   getEmailDashboard,
@@ -45,7 +50,14 @@ import {
   updateEmailSettings,
   testEmailSmtpConnection,
   resetEmailCircuitBreaker,
-  getEmailAuditLogs
+  getEmailAuditLogs,
+  getEmailAccounts,
+  createEmailAccount,
+  updateEmailAccount,
+  deleteEmailAccount,
+  toggleEmailAccountActive,
+  testEmailAccountConnection,
+  resetEmailAccountCircuitBreaker
 } from '../api';
 import Pagination, { usePagination } from '../components/Pagination';
 
@@ -60,11 +72,41 @@ export default function EmailView() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
+  // Multi-Account States
+  const [accounts, setAccounts] = useState([]);
+  const [showAccountModal, setShowAccountModal] = useState(false);
+  const [editingAccount, setEditingAccount] = useState(null);
+  const [testingAccountId, setTestingAccountId] = useState(null);
+
+  const [accountForm, setAccountForm] = useState({
+    name: 'Hostinger Outreach 01',
+    priority: 1,
+    is_active: true,
+    provider_name: 'Hostinger',
+    smtp_host: 'smtp.hostinger.com',
+    smtp_port: 465,
+    smtp_username: '',
+    smtp_password: '',
+    use_ssl: true,
+    use_tls: false,
+    from_email: '',
+    from_name: 'Aesthetic Conference Hub',
+    reply_to: 'support@aesthetichub.vn',
+    daily_limit: 300,
+    safety_margin_pct: 10.0,
+    hourly_limit: 30,
+    min_delay_seconds: 15,
+    max_delay_seconds: 45,
+    sending_window_start: '08:00',
+    sending_window_end: '18:00'
+  });
+
   // Pagination Hooks
   const paginatedCampaigns = usePagination(campaigns, 8);
   const paginatedQueue = usePagination(queue, 12);
   const paginatedSuppressions = usePagination(suppressions, 10);
   const paginatedAuditLogs = usePagination(auditLogs, 15);
+  const paginatedAccounts = usePagination(accounts, 10);
 
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -110,18 +152,20 @@ export default function EmailView() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      const [dashRes, campRes, suppRes, settRes, logsRes] = await Promise.all([
+      const [dashRes, campRes, suppRes, settRes, logsRes, accRes] = await Promise.all([
         getEmailDashboard(),
         getEmailCampaigns(),
         getEmailSuppressions(),
         getEmailSettings(),
-        getEmailAuditLogs(50)
+        getEmailAuditLogs(50),
+        getEmailAccounts()
       ]);
       setDashboardData(dashRes.data);
       setCampaigns(campRes.data);
       setSuppressions(suppRes.data);
       setSettings(settRes.data);
       setAuditLogs(logsRes.data);
+      setAccounts(accRes.data || []);
     } catch (err) {
       console.error('Failed to load email data:', err);
       showNotification('Không thể tải dữ liệu email: ' + (err.response?.data?.detail || err.message), true);
@@ -360,6 +404,134 @@ export default function EmailView() {
     }
   };
 
+  // Multi-Account Handlers
+  const handleOpenCreateAccount = () => {
+    if (accounts.length >= 10) {
+      showNotification('Đã đạt giới hạn tối đa 10 cấu hình email gửi.', true);
+      return;
+    }
+    const nextPriority = accounts.length + 1;
+    setAccountForm({
+      name: `Hostinger Outreach 0${nextPriority}`,
+      priority: nextPriority,
+      is_active: true,
+      provider_name: 'Hostinger',
+      smtp_host: 'smtp.hostinger.com',
+      smtp_port: 465,
+      smtp_username: `outreach${nextPriority}@aesthetichub.vn`,
+      smtp_password: '',
+      use_ssl: true,
+      use_tls: false,
+      from_email: `outreach${nextPriority}@aesthetichub.vn`,
+      from_name: 'Aesthetic Conference Hub',
+      reply_to: 'support@aesthetichub.vn',
+      daily_limit: 300,
+      safety_margin_pct: 10.0,
+      hourly_limit: 30,
+      min_delay_seconds: 15,
+      max_delay_seconds: 45,
+      sending_window_start: '08:00',
+      sending_window_end: '18:00'
+    });
+    setEditingAccount(null);
+    setShowAccountModal(true);
+  };
+
+  const handleOpenEditAccount = (acc) => {
+    setAccountForm({
+      name: acc.name,
+      priority: acc.priority,
+      is_active: acc.is_active,
+      provider_name: acc.provider_name,
+      smtp_host: acc.smtp_host,
+      smtp_port: acc.smtp_port,
+      smtp_username: acc.smtp_username,
+      smtp_password: acc.smtp_password || '',
+      use_ssl: acc.use_ssl,
+      use_tls: acc.use_tls,
+      from_email: acc.from_email,
+      from_name: acc.from_name,
+      reply_to: acc.reply_to || '',
+      daily_limit: acc.daily_limit,
+      safety_margin_pct: acc.safety_margin_pct,
+      hourly_limit: acc.hourly_limit,
+      min_delay_seconds: acc.min_delay_seconds,
+      max_delay_seconds: acc.max_delay_seconds,
+      sending_window_start: acc.sending_window_start,
+      sending_window_end: acc.sending_window_end
+    });
+    setEditingAccount(acc);
+    setShowAccountModal(true);
+  };
+
+  const handleSaveAccount = async (e) => {
+    e.preventDefault();
+    try {
+      if (editingAccount) {
+        await updateEmailAccount(editingAccount.id, accountForm);
+        showNotification(`Đã cập nhật cấu hình '${accountForm.name}' thành công.`);
+      } else {
+        await createEmailAccount(accountForm);
+        showNotification(`Đã tạo cấu hình '${accountForm.name}' thành công.`);
+      }
+      setShowAccountModal(false);
+      loadAllData();
+    } catch (err) {
+      showNotification('Lỗi lưu cấu hình: ' + (err.response?.data?.detail || err.message), true);
+    }
+  };
+
+  const handleDeleteAccount = async (acc) => {
+    if (accounts.length <= 1) {
+      showNotification('Không thể xóa cấu hình duy nhất. Hệ thống cần ít nhất 1 tài khoản.', true);
+      return;
+    }
+    if (!window.confirm(`Bạn có chắc chắn muốn xóa cấu hình '${acc.name}' (${acc.from_email})?`)) return;
+    try {
+      await deleteEmailAccount(acc.id);
+      showNotification(`Đã xóa cấu hình '${acc.name}' thành công.`);
+      loadAllData();
+    } catch (err) {
+      showNotification('Lỗi xóa cấu hình: ' + (err.response?.data?.detail || err.message), true);
+    }
+  };
+
+  const handleToggleAccountActive = async (acc) => {
+    try {
+      await toggleEmailAccountActive(acc.id);
+      showNotification(`Đã ${acc.is_active ? 'vô hiệu hóa' : 'kích hoạt'} cấu hình '${acc.name}'.`);
+      loadAllData();
+    } catch (err) {
+      showNotification('Lỗi bật/tắt cấu hình: ' + (err.response?.data?.detail || err.message), true);
+    }
+  };
+
+  const handleTestAccountConnection = async (acc) => {
+    setTestingAccountId(acc.id);
+    try {
+      const res = await testEmailAccountConnection(acc.id);
+      if (res.data.success) {
+        showNotification(res.data.message);
+      } else {
+        showNotification(res.data.message, true);
+      }
+    } catch (err) {
+      showNotification('Lỗi kiểm tra kết nối: ' + (err.response?.data?.detail || err.message), true);
+    } finally {
+      setTestingAccountId(null);
+    }
+  };
+
+  const handleResetAccountCircuitBreaker = async (acc) => {
+    try {
+      await resetEmailAccountCircuitBreaker(acc.id);
+      showNotification(`Đã reset Circuit Breaker cho cấu hình '${acc.name}'.`);
+      loadAllData();
+    } catch (err) {
+      showNotification('Lỗi reset: ' + (err.response?.data?.detail || err.message), true);
+    }
+  };
+
   const quota = dashboardData?.quota || { daily_limit: 300, used_count: 0, remaining_count: 300, effective_limit: 270, safety_margin_pct: 10 };
   const metrics = dashboardData?.metrics || { sent_count: 0, queued_count: 0, failed_count: 0, skipped_count: 0 };
   const providerStatus = dashboardData?.provider_status || {};
@@ -420,7 +592,7 @@ export default function EmailView() {
           { id: 'campaigns', label: 'Chiến dịch', icon: Layers },
           { id: 'queue', label: 'Hàng đợi (Queue)', icon: Clock },
           { id: 'suppression', label: 'Danh sách chặn (Suppression)', icon: ShieldAlert },
-          { id: 'settings', label: 'Cấu hình SMTP & An toàn', icon: Settings },
+          { id: 'settings', label: `Tài khoản Gửi (${accounts.length}/10)`, icon: Server },
           { id: 'logs', label: 'Nhật ký (Audit Logs)', icon: Database }
         ].map((tab) => {
           const Icon = tab.icon;
@@ -475,6 +647,48 @@ export default function EmailView() {
                 <span>Còn lại: <strong className="text-slate-800">{quota.remaining_count} email</strong></span>
                 <span>Reset lúc: <strong>{quota.resets_at}</strong></span>
               </div>
+
+              {dashboardData?.accounts && dashboardData.accounts.length > 0 && (
+                <div className="mt-4 pt-3 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-semibold text-slate-700">
+                    <span className="flex items-center gap-1">
+                      <ArrowRightLeft className="w-3.5 h-3.5 text-blue-600" />
+                      Tiến độ hạn ngạch từng tài khoản (Auto-Rotation):
+                    </span>
+                    <span className="text-[11px] text-slate-500 font-normal">
+                      Đang gửi qua: <strong className="text-blue-600 font-semibold">{dashboardData?.provider_status?.current_active_sender}</strong>
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {dashboardData.accounts.map((acc) => (
+                      <div key={acc.id} className="p-2.5 rounded-lg bg-slate-50 border border-slate-200 text-xs flex flex-col justify-between">
+                        <div className="flex items-center justify-between font-medium">
+                          <span className="truncate text-slate-700 font-semibold">#{acc.priority} {acc.name}</span>
+                          {acc.is_exhausted ? (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-700">Hết quota</span>
+                          ) : !acc.is_active ? (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-slate-200 text-slate-600">Tắt</span>
+                          ) : acc.is_paused ? (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-red-100 text-red-700">Tạm dừng</span>
+                          ) : (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded font-bold bg-emerald-100 text-emerald-700">Khả dụng</span>
+                          )}
+                        </div>
+                        <div className="w-full bg-slate-200 rounded-full h-1.5 my-1.5 overflow-hidden">
+                          <div
+                            className={`h-1.5 rounded-full ${acc.is_exhausted ? 'bg-amber-500' : 'bg-blue-600'}`}
+                            style={{ width: `${Math.min(100, acc.percent_used)}%` }}
+                          ></div>
+                        </div>
+                        <div className="flex justify-between text-[11px] text-slate-500">
+                          <span>{acc.used_count} / {acc.effective_limit} email</span>
+                          <span>Còn: <strong className="text-slate-700">{acc.remaining_count}</strong></span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="mt-4 pt-3 border-t border-slate-100 flex items-center justify-between text-xs">
                 <span className="text-slate-500">Khung giờ gửi: <strong>{settings?.sending_window_start || '08:00'} - {settings?.sending_window_end || '18:00'} (GMT+7)</strong></span>
@@ -954,216 +1168,564 @@ export default function EmailView() {
       )}
 
 
-      {/* TAB 5: SETTINGS & SAFETY */}
-      {activeSubTab === 'settings' && settings && (
-        <form onSubmit={handleSaveSettings} className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-6">
-          <div className="flex justify-between items-center border-b border-slate-100 pb-4">
+      {/* TAB 5: MULTI-ACCOUNT SENDER CONFIGURATIONS (UP TO 10 ACCOUNTS & AUTO-ROTATION) */}
+      {activeSubTab === 'settings' && (
+        <div className="space-y-6">
+          {/* Top Banner with Summary & Add Button */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
             <div>
-              <h3 className="font-bold text-slate-800 text-lg">Cấu hình Gửi Email & Tham số An toàn</h3>
-              <p className="text-xs text-slate-500">Tùy chỉnh máy chủ Hostinger, hạn ngạch gửi và thời gian nghỉ chống Spam</p>
+              <div className="flex items-center gap-2">
+                <Server className="w-5 h-5 text-blue-600" />
+                <h3 className="font-bold text-slate-800 text-lg">Quản lý 10 Cấu hình Email gửi & Luân chuyển Quota</h3>
+                <span className="px-2.5 py-0.5 bg-blue-100 text-blue-800 text-xs font-bold rounded-full">
+                  {accounts.length} / 10 cấu hình
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 max-w-2xl">
+                Cơ chế <strong>Auto-Rotation</strong> tự động: Hệ thống ưu tiên gửi theo thứ tự ưu tiên (#1, #2, #3...). Khi một tài khoản chạm trần hạn ngạch ngày (daily limit), hệ thống sẽ <strong>tự động chuyển tiếp sang tài khoản kế tiếp</strong> mà không làm gián đoạn chiến dịch.
+              </p>
             </div>
+
             <button
-              type="button"
-              onClick={handleTestConnection}
-              className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-semibold rounded text-xs border border-blue-200 transition"
+              onClick={handleOpenCreateAccount}
+              disabled={accounts.length >= 10}
+              className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white rounded-lg text-xs font-bold shadow-sm transition flex-shrink-0"
             >
-              Kiểm tra kết nối SMTP
+              <Plus className="w-4 h-4" />
+              <span>Thêm Cấu Hình Gửi Mới ({accounts.length}/10)</span>
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* SMTP Server */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <Settings className="w-4 h-4 text-blue-600" /> Máy chủ SMTP
-              </h4>
-
-              <div>
-                <label className="text-xs font-semibold text-slate-700">Chế độ Provider</label>
-                <select
-                  value={settings.provider_name}
-                  onChange={(e) => setSettings({ ...settings, provider_name: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs bg-white font-medium"
-                >
-                  <option value="Hostinger">Hostinger SMTP (Gửi thực qua smtplib)</option>
-                  <option value="MockEmailProvider">Mock Email Provider (Mô phỏng thử nghiệm / Test Suite)</option>
-                </select>
+          {/* Quick Metrics Bar */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400 uppercase">Tài khoản Hoạt động</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-2xl font-bold text-slate-800">
+                  {accounts.filter(a => a.is_active && !a.is_paused).length}
+                </span>
+                <span className="text-xs text-slate-500">/ {accounts.length} cấu hình</span>
               </div>
+            </div>
 
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="text-xs font-semibold text-slate-700">SMTP Host</label>
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400 uppercase">Tổng Hạn ngạch Ngày</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-2xl font-bold text-emerald-600">
+                  {accounts.filter(a => a.is_active).reduce((sum, a) => sum + (a.daily_limit || 0), 0)}
+                </span>
+                <span className="text-xs text-slate-500">emails/ngày</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400 uppercase">Hạn mức Hiệu dụng (An toàn)</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="text-2xl font-bold text-blue-600">
+                  {accounts.filter(a => a.is_active).reduce((sum, a) => sum + (a.effective_limit || Math.round(a.daily_limit * 0.9)), 0)}
+                </span>
+                <span className="text-xs text-slate-500">emails/ngày (-10%)</span>
+              </div>
+            </div>
+
+            <div className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm">
+              <span className="text-xs font-bold text-slate-400 uppercase">Tài khoản Gửi Hiện tại</span>
+              <div className="flex items-center gap-2 mt-1">
+                <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span className="text-sm font-bold text-slate-800 truncate" title={dashboardData?.provider_status?.current_active_sender || 'Đang xác định'}>
+                  {dashboardData?.provider_status?.current_active_sender || 'Chưa xác định'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Accounts List Table / Cards */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+              <h4 className="font-bold text-slate-800 text-sm flex items-center gap-2">
+                <ArrowRightLeft className="w-4 h-4 text-blue-600" />
+                Danh Sách Cấu Hình Gửi & Hàng Đợi Luân Chuyển ({accounts.length})
+              </h4>
+              <span className="text-xs text-slate-500">
+                Sắp xếp theo độ ưu tiên: Số nhỏ gửi trước, khi đầy chuyển số tiếp theo
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-600">
+                <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
+                  <tr>
+                    <th className="p-3 text-center w-16">Ưu tiên</th>
+                    <th className="p-3">Tên & Người gửi (From)</th>
+                    <th className="p-3">Máy chủ SMTP</th>
+                    <th className="p-3">Hạn ngạch hôm nay (Quota)</th>
+                    <th className="p-3 text-center">Trạng thái</th>
+                    <th className="p-3 text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedAccounts.totalItems === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-8 text-slate-400">
+                        Chưa có cấu hình email nào. Hãy bấm "Thêm Cấu Hình Gửi Mới".
+                      </td>
+                    </tr>
+                  ) : (
+                    paginatedAccounts.paginatedItems.map((acc) => {
+                      const isTesting = testingAccountId === acc.id;
+                      return (
+                        <tr key={acc.id} className={`hover:bg-slate-50/80 transition ${!acc.is_active ? 'opacity-60 bg-slate-50/40' : ''}`}>
+                          {/* Priority badge */}
+                          <td className="p-3 text-center">
+                            <span className={`inline-block px-2.5 py-1 rounded-full font-bold text-xs ${
+                              acc.priority === 1
+                                ? 'bg-blue-600 text-white shadow-sm'
+                                : 'bg-slate-100 text-slate-700 border border-slate-200'
+                            }`}>
+                              #{acc.priority}
+                            </span>
+                          </td>
+
+                          {/* Account Name & Sender */}
+                          <td className="p-3">
+                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
+                              {acc.name}
+                              {acc.is_active && !acc.is_paused && !acc.is_exhausted && (
+                                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Đang sẵn sàng gửi"></span>
+                              )}
+                            </div>
+                            <div className="text-xs text-slate-500 font-medium">
+                              {acc.from_name} &lt;{acc.from_email}&gt;
+                            </div>
+                            {acc.reply_to && (
+                              <div className="text-[10px] text-slate-400">Reply-To: {acc.reply_to}</div>
+                            )}
+                          </td>
+
+                          {/* SMTP Host */}
+                          <td className="p-3">
+                            <div className="font-mono text-slate-700">
+                              {acc.smtp_host}:{acc.smtp_port}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-1 mt-0.5">
+                              <span>{acc.use_ssl ? 'SSL (465)' : acc.use_tls ? 'TLS (587)' : 'Plain'}</span>
+                              <span>•</span>
+                              <span className="truncate max-w-[130px]" title={acc.smtp_username}>{acc.smtp_username}</span>
+                            </div>
+                          </td>
+
+                          {/* Quota Progress */}
+                          <td className="p-3 w-56">
+                            <div className="flex justify-between items-center text-xs mb-1">
+                              <span className="font-semibold text-slate-700">
+                                {acc.used_today || 0} / {acc.effective_limit || acc.daily_limit}
+                              </span>
+                              <span className="text-[10px] text-slate-400">
+                                (Max: {acc.daily_limit})
+                              </span>
+                            </div>
+                            <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                              <div
+                                className={`h-2 rounded-full transition-all duration-300 ${
+                                  acc.is_exhausted
+                                    ? 'bg-amber-500'
+                                    : acc.percent_used > 80
+                                      ? 'bg-amber-400'
+                                      : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${Math.min(100, acc.percent_used || 0)}%` }}
+                              ></div>
+                            </div>
+                            <div className="flex justify-between items-center text-[10px] text-slate-400 mt-1">
+                              <span>Còn lại: <strong className="text-slate-700">{acc.remaining_today ?? (acc.daily_limit - (acc.used_today || 0))}</strong></span>
+                              {acc.is_exhausted ? (
+                                <span className="px-1.5 py-0.2 rounded font-bold bg-amber-100 text-amber-700">Hết quota ngày</span>
+                              ) : acc.percent_used > 0 ? (
+                                <span>{acc.percent_used}%</span>
+                              ) : (
+                                <span className="text-emerald-600 font-medium">Chưa dùng</span>
+                              )}
+                            </div>
+                          </td>
+
+                          {/* Status Badge */}
+                          <td className="p-3 text-center">
+                            {!acc.is_active ? (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
+                                VÔ HIỆU HÓA
+                              </span>
+                            ) : acc.is_paused ? (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                                TẠM DỪNG (CB)
+                              </span>
+                            ) : acc.is_exhausted ? (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                ĐÃ HẾT QUOTA
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                                ĐANG SẴN SÀNG
+                              </span>
+                            )}
+                          </td>
+
+                          {/* Action Buttons */}
+                          <td className="p-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Test Connection */}
+                              <button
+                                onClick={() => handleTestAccountConnection(acc)}
+                                disabled={isTesting}
+                                className="p-1.5 rounded text-blue-600 hover:bg-blue-50 transition border border-slate-200"
+                                title="Kiểm tra kết nối SMTP"
+                              >
+                                {isTesting ? (
+                                  <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                                ) : (
+                                  <Server className="w-3.5 h-3.5" />
+                                )}
+                              </button>
+
+                              {/* Toggle Active */}
+                              <button
+                                onClick={() => handleToggleAccountActive(acc)}
+                                className={`p-1.5 rounded transition border ${
+                                  acc.is_active
+                                    ? 'text-emerald-600 hover:bg-emerald-50 border-emerald-200'
+                                    : 'text-slate-400 hover:bg-slate-100 border-slate-200'
+                                }`}
+                                title={acc.is_active ? 'Tắt tài khoản này' : 'Bật tài khoản này'}
+                              >
+                                <Power className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Edit Account */}
+                              <button
+                                onClick={() => handleOpenEditAccount(acc)}
+                                className="p-1.5 rounded text-slate-600 hover:bg-slate-100 transition border border-slate-200"
+                                title="Chỉnh sửa cấu hình"
+                              >
+                                <Edit className="w-3.5 h-3.5" />
+                              </button>
+
+                              {/* Reset CB if paused */}
+                              {acc.is_paused && (
+                                <button
+                                  onClick={() => handleResetAccountCircuitBreaker(acc)}
+                                  className="p-1.5 rounded text-amber-600 hover:bg-amber-50 transition border border-amber-200"
+                                  title="Reset lỗi Circuit Breaker"
+                                >
+                                  <ShieldCheck className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Delete Account */}
+                              {accounts.length > 1 && (
+                                <button
+                                  onClick={() => handleDeleteAccount(acc)}
+                                  className="p-1.5 rounded text-red-500 hover:bg-red-50 transition border border-slate-200"
+                                  title="Xóa cấu hình"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            <Pagination
+              totalItems={paginatedAccounts.totalItems}
+              currentPage={paginatedAccounts.currentPage}
+              pageSize={paginatedAccounts.pageSize}
+              onPageChange={paginatedAccounts.setCurrentPage}
+              onPageSizeChange={paginatedAccounts.setPageSize}
+              darkMode={false}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: ADD / EDIT SENDER ACCOUNT (UP TO 10 ACCOUNTS) */}
+      {showAccountModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-slate-100 max-h-[90vh] overflow-y-auto space-y-4">
+            <div className="flex justify-between items-center border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="font-bold text-slate-800 text-lg">
+                  {editingAccount ? `Chỉnh Sửa Cấu Hình: ${editingAccount.name}` : 'Thêm Cấu Hình Gửi Mới (Tối đa 10)'}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Cấu hình tài khoản SMTP gửi email và hạn ngạch ngày phục vụ luân chuyển tự động
+                </p>
+              </div>
+              <button
+                onClick={() => setShowAccountModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveAccount} className="space-y-4 text-xs">
+              {/* Basic & Priority */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="font-semibold text-slate-700">Tên gợi nhớ của cấu hình *</label>
                   <input
                     type="text"
-                    value={settings.smtp_host}
-                    onChange={(e) => setSettings({ ...settings, smtp_host: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    required
+                    value={accountForm.name}
+                    onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
+                    placeholder="VD: Hostinger Outreach 01"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Cổng (Port)</label>
+                  <label className="font-semibold text-slate-700">Thứ tự ưu tiên (1 - 10) *</label>
                   <input
                     type="number"
-                    value={settings.smtp_port}
-                    onChange={(e) => setSettings({ ...settings, smtp_port: parseInt(e.target.value) || 465 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    min="1"
+                    max="10"
+                    required
+                    value={accountForm.priority}
+                    onChange={(e) => setAccountForm({ ...accountForm, priority: parseInt(e.target.value) || 1 })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded text-center font-bold"
+                  />
+                  <small className="text-[10px] text-slate-400">Số 1 gửi trước, sau đó đến số 2...</small>
+                </div>
+              </div>
+
+              {/* Provider Mode */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Loại Provider</label>
+                  <select
+                    value={accountForm.provider_name}
+                    onChange={(e) => setAccountForm({ ...accountForm, provider_name: e.target.value })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded bg-white font-medium"
+                  >
+                    <option value="Hostinger">Hostinger SMTP (Gửi thực qua smtplib)</option>
+                    <option value="MockEmailProvider">Mock Email Provider (Mô phỏng thử nghiệm / Test)</option>
+                  </select>
+                </div>
+                <div className="flex items-center pt-5">
+                  <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={accountForm.is_active}
+                      onChange={(e) => setAccountForm({ ...accountForm, is_active: e.target.checked })}
+                      className="rounded text-blue-600"
+                    />
+                    <span>Kích hoạt tài khoản này trong vòng xoay gửi</span>
+                  </label>
+                </div>
+              </div>
+
+              {/* SMTP Host & Port */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="font-semibold text-slate-700">SMTP Host *</label>
+                  <input
+                    type="text"
+                    required
+                    value={accountForm.smtp_host}
+                    onChange={(e) => setAccountForm({ ...accountForm, smtp_host: e.target.value })}
+                    placeholder="smtp.hostinger.com"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Cổng (Port) *</label>
+                  <input
+                    type="number"
+                    required
+                    value={accountForm.smtp_port}
+                    onChange={(e) => setAccountForm({ ...accountForm, smtp_port: parseInt(e.target.value) || 465 })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700">SMTP Username</label>
-                <input
-                  type="text"
-                  value={settings.smtp_username}
-                  onChange={(e) => setSettings({ ...settings, smtp_username: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                />
+              {/* Username & Password */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">SMTP Username *</label>
+                  <input
+                    type="text"
+                    required
+                    value={accountForm.smtp_username}
+                    onChange={(e) => setAccountForm({ ...accountForm, smtp_username: e.target.value })}
+                    placeholder="outreach@aesthetichub.vn"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">SMTP Password</label>
+                  <input
+                    type="password"
+                    value={accountForm.smtp_password}
+                    onChange={(e) => setAccountForm({ ...accountForm, smtp_password: e.target.value })}
+                    placeholder="••••••••••••"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                </div>
               </div>
 
-              <div>
-                <label className="text-xs font-semibold text-slate-700">SMTP Password</label>
-                <input
-                  type="password"
-                  value={settings.smtp_password || ''}
-                  placeholder="••••••••••••"
-                  onChange={(e) => setSettings({ ...settings, smtp_password: e.target.value })}
-                  className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                />
-              </div>
-
-              <div className="flex gap-4 text-xs font-medium text-slate-700">
+              {/* SSL / TLS */}
+              <div className="flex gap-4 font-medium text-slate-700">
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={settings.use_ssl}
-                    onChange={(e) => setSettings({ ...settings, use_ssl: e.target.checked })}
+                    checked={accountForm.use_ssl}
+                    onChange={(e) => setAccountForm({ ...accountForm, use_ssl: e.target.checked })}
                   />
-                  Sử dụng SSL (Cổng 465)
+                  Sử dụng SSL (Khuyên dùng: Cổng 465)
                 </label>
                 <label className="flex items-center gap-2">
                   <input
                     type="checkbox"
-                    checked={settings.use_tls}
-                    onChange={(e) => setSettings({ ...settings, use_tls: e.target.checked })}
+                    checked={accountForm.use_tls}
+                    onChange={(e) => setAccountForm({ ...accountForm, use_tls: e.target.checked })}
                   />
                   Sử dụng TLS (Cổng 587)
                 </label>
               </div>
-            </div>
 
-            {/* Quota & Safety Limits */}
-            <div className="space-y-4">
-              <h4 className="text-sm font-bold text-slate-700 flex items-center gap-2">
-                <ShieldCheck className="w-4 h-4 text-green-600" /> Giới hạn Quota & An toàn
-              </h4>
-
-              <div className="grid grid-cols-2 gap-3">
+              {/* From Email, From Name, Reply To */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Giới hạn Ngày (Daily Limit)</label>
+                  <label className="font-semibold text-slate-700">From Email *</label>
                   <input
-                    type="number"
-                    value={settings.daily_limit}
-                    onChange={(e) => setSettings({ ...settings, daily_limit: parseInt(e.target.value) || 300 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                  />
-                  <small className="text-[10px] text-slate-400">Gói Hostinger: 100, 200, 300, 500</small>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Khoảng An toàn (Safety Margin %)</label>
-                  <input
-                    type="number"
-                    value={settings.safety_margin_pct}
-                    onChange={(e) => setSettings({ ...settings, safety_margin_pct: parseFloat(e.target.value) || 10 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                  />
-                  <small className="text-[10px] text-slate-400">Mặc định: 10% (Chỉ gửi 90% quota)</small>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Giới hạn/Giờ</label>
-                  <input
-                    type="number"
-                    value={settings.hourly_limit}
-                    onChange={(e) => setSettings({ ...settings, hourly_limit: parseInt(e.target.value) || 30 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    type="email"
+                    required
+                    value={accountForm.from_email}
+                    onChange={(e) => setAccountForm({ ...accountForm, from_email: e.target.value })}
+                    placeholder="outreach@aesthetichub.vn"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Delay Tối thiểu (s)</label>
-                  <input
-                    type="number"
-                    value={settings.min_delay_seconds}
-                    onChange={(e) => setSettings({ ...settings, min_delay_seconds: parseInt(e.target.value) || 15 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Delay Tối đa (s)</label>
-                  <input
-                    type="number"
-                    value={settings.max_delay_seconds}
-                    onChange={(e) => setSettings({ ...settings, max_delay_seconds: parseInt(e.target.value) || 45 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-semibold text-slate-700">Bắt đầu Khung giờ Gửi</label>
+                  <label className="font-semibold text-slate-700">From Name *</label>
                   <input
                     type="text"
-                    value={settings.sending_window_start}
-                    onChange={(e) => setSettings({ ...settings, sending_window_start: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs font-mono"
+                    required
+                    value={accountForm.from_name}
+                    onChange={(e) => setAccountForm({ ...accountForm, from_name: e.target.value })}
+                    placeholder="Aesthetic Conference"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Kết thúc Khung giờ Gửi</label>
+                  <label className="font-semibold text-slate-700">Reply-To</label>
                   <input
-                    type="text"
-                    value={settings.sending_window_end}
-                    onChange={(e) => setSettings({ ...settings, sending_window_end: e.target.value })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs font-mono"
+                    type="email"
+                    value={accountForm.reply_to}
+                    onChange={(e) => setAccountForm({ ...accountForm, reply_to: e.target.value })}
+                    placeholder="support@aesthetichub.vn"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
               </div>
 
+              {/* Limits & Margin */}
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700">Hạn ngạch/Ngày *</label>
+                  <input
+                    type="number"
+                    required
+                    value={accountForm.daily_limit}
+                    onChange={(e) => setAccountForm({ ...accountForm, daily_limit: parseInt(e.target.value) || 300 })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                  <small className="text-[10px] text-slate-400">Hostinger: 100, 200, 300, 500</small>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Biên an toàn (%)</label>
+                  <input
+                    type="number"
+                    value={accountForm.safety_margin_pct}
+                    onChange={(e) => setAccountForm({ ...accountForm, safety_margin_pct: parseFloat(e.target.value) || 10 })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                  <small className="text-[10px] text-slate-400">Mặc định: 10% (Chỉ gửi 90%)</small>
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Giới hạn/Giờ</label>
+                  <input
+                    type="number"
+                    value={accountForm.hourly_limit}
+                    onChange={(e) => setAccountForm({ ...accountForm, hourly_limit: parseInt(e.target.value) || 30 })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700">Delay Ngẫu nhiên (s)</label>
+                  <div className="flex items-center gap-1 mt-1">
+                    <input
+                      type="number"
+                      value={accountForm.min_delay_seconds}
+                      onChange={(e) => setAccountForm({ ...accountForm, min_delay_seconds: parseInt(e.target.value) || 15 })}
+                      className="w-1/2 p-2 border border-slate-300 rounded text-center"
+                    />
+                    <span>-</span>
+                    <input
+                      type="number"
+                      value={accountForm.max_delay_seconds}
+                      onChange={(e) => setAccountForm({ ...accountForm, max_delay_seconds: parseInt(e.target.value) || 45 })}
+                      className="w-1/2 p-2 border border-slate-300 rounded text-center"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Sending Window */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Max Email / 7 Ngày / Người</label>
+                  <label className="font-semibold text-slate-700">Khung giờ bắt đầu gửi</label>
                   <input
-                    type="number"
-                    value={settings.max_emails_per_contact_7d}
-                    onChange={(e) => setSettings({ ...settings, max_emails_per_contact_7d: parseInt(e.target.value) || 1 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    type="text"
+                    value={accountForm.sending_window_start}
+                    onChange={(e) => setAccountForm({ ...accountForm, sending_window_start: e.target.value })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded font-mono"
                   />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-slate-700">Max Email / 30 Ngày / Người</label>
+                  <label className="font-semibold text-slate-700">Khung giờ kết thúc gửi</label>
                   <input
-                    type="number"
-                    value={settings.max_emails_per_contact_30d}
-                    onChange={(e) => setSettings({ ...settings, max_emails_per_contact_30d: parseInt(e.target.value) || 3 })}
-                    className="w-full mt-1 p-2 border border-slate-300 rounded text-xs"
+                    type="text"
+                    value={accountForm.sending_window_end}
+                    onChange={(e) => setAccountForm({ ...accountForm, sending_window_end: e.target.value })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded font-mono"
                   />
                 </div>
               </div>
-            </div>
-          </div>
 
-          <div className="pt-4 border-t border-slate-100 flex justify-end">
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg shadow-sm transition"
-            >
-              Lưu Cấu Hình
-            </button>
+              {/* Modal Buttons */}
+              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setShowAccountModal(false)}
+                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition"
+                >
+                  {editingAccount ? 'Lưu Thay Đổi' : 'Tạo Cấu Hình'}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       )}
 
       {/* TAB 6: AUDIT LOGS */}

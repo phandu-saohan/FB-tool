@@ -124,6 +124,9 @@ class SuppressionResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ProviderSettingUpdate(BaseModel):
+    name: Optional[str] = None
+    is_active: Optional[bool] = None
+    priority: Optional[int] = None
     provider_name: Optional[str] = None
     smtp_host: Optional[str] = None
     smtp_port: Optional[int] = None
@@ -148,6 +151,9 @@ class ProviderSettingUpdate(BaseModel):
 
 class ProviderSettingResponse(BaseModel):
     id: int
+    name: str = "Tài khoản mặc định"
+    is_active: bool = True
+    priority: int = 1
     provider_name: str
     smtp_host: str
     smtp_port: int
@@ -176,8 +182,62 @@ class ProviderSettingResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+class EmailAccountCreate(BaseModel):
+    name: str = "Hostinger Outreach"
+    priority: int = 1
+    is_active: bool = True
+    provider_name: str = "Hostinger"
+    smtp_host: str = "smtp.hostinger.com"
+    smtp_port: int = 465
+    smtp_username: str
+    smtp_password: Optional[str] = None
+    use_ssl: bool = True
+    use_tls: bool = False
+    from_email: str
+    from_name: str = "Aesthetic Conference"
+    reply_to: Optional[str] = None
+    daily_limit: int = 300
+    safety_margin_pct: float = 10.0
+    hourly_limit: int = 30
+    min_delay_seconds: int = 15
+    max_delay_seconds: int = 45
+    sending_window_start: str = "08:00"
+    sending_window_end: str = "18:00"
+
+class EmailAccountUpdate(BaseModel):
+    name: Optional[str] = None
+    priority: Optional[int] = None
+    is_active: Optional[bool] = None
+    provider_name: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    use_ssl: Optional[bool] = None
+    use_tls: Optional[bool] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    reply_to: Optional[str] = None
+    daily_limit: Optional[int] = None
+    safety_margin_pct: Optional[float] = None
+    hourly_limit: Optional[int] = None
+    min_delay_seconds: Optional[int] = None
+    max_delay_seconds: Optional[int] = None
+    sending_window_start: Optional[str] = None
+    sending_window_end: Optional[str] = None
+    is_paused: Optional[bool] = None
+
+class EmailAccountResponse(ProviderSettingResponse):
+    used_today: int = 0
+    remaining_today: int = 0
+    effective_limit: int = 0
+    percent_used: float = 0.0
+    is_exhausted: bool = False
+
 class EmailDashboardStats(BaseModel):
     quota: Dict[str, Any]
     metrics: Dict[str, Any]
     provider_status: Dict[str, Any]
     active_campaigns: List[CampaignResponse]
+    accounts: Optional[List[Dict[str, Any]]] = None
+

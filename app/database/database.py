@@ -51,4 +51,22 @@ def get_db():
 def init_db():
     import app.database.models
     Base.metadata.create_all(bind=engine)
+
+    # Safe auto-migration for SQLite to add missing columns if table already exists
+    try:
+        with engine.connect() as conn:
+            from sqlalchemy import text
+            res = conn.execute(text("PRAGMA table_info(email_provider_settings)"))
+            cols = [row[1] for row in res.fetchall()]
+            if cols:
+                if 'name' not in cols:
+                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN name VARCHAR(100) DEFAULT 'Tài khoản mặc định'"))
+                if 'is_active' not in cols:
+                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+                if 'priority' not in cols:
+                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN priority INTEGER DEFAULT 1"))
+                conn.commit()
+    except Exception:
+        pass
+
     log_info('DATABASE', 'Database tables verified and initialized')

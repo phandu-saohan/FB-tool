@@ -24,6 +24,9 @@ from app.schemas.email_schemas import (
     SuppressionResponse,
     ProviderSettingUpdate,
     ProviderSettingResponse,
+    EmailAccountCreate,
+    EmailAccountUpdate,
+    EmailAccountResponse,
     EmailDashboardStats
 )
 from app.services.email.quota_manager import EmailQuotaManager
@@ -42,10 +45,10 @@ router = APIRouter(prefix="/api/email", tags=["Email Campaign Queue & Sending"])
 
 @router.get("/dashboard", response_model=EmailDashboardStats)
 def get_email_dashboard(db: Session = Depends(get_db)):
-    # 1. Quota
+    # 1. Aggregate Quota across all active accounts
+    aggregate_quota = EmailQuotaManager.get_aggregate_quota_status(db)
     setting = db.query(EmailProviderSetting).first()
     provider_name = setting.provider_name if setting else "Hostinger"
-    quota_info = EmailQuotaManager.get_quota_status(db, provider_name)
 
     # 2. Metrics across all campaigns
     total_campaigns = db.query(EmailCampaign).count()
@@ -72,30 +75,31 @@ def get_email_dashboard(db: Session = Depends(get_db)):
         EmailCampaign.status.in_(["RUNNING", "PAUSED", "DRAFT"])
     ).order_by(EmailCampaign.updated_at.desc()).limit(10).all()
 
-    # Compute estimated days remaining for each
     camp_responses = []
-    effective_limit = quota_info["effective_limit"]
+    effective_limit = aggregate_quota.get("effective_limit", 300)
     for c in active_camps:
         c_dict = CampaignResponse.model_validate(c)
         if c.status == "RUNNING" and c.remaining_count > 0 and effective_limit > 0:
             c_dict.estimated_days_remaining = round(c.remaining_count / effective_limit, 1)
         camp_responses.append(c_dict)
 
-    # 4. Provider Status
+    # 4. Provider Status & Rotation Indicator
     cb_tripped, cb_reason = EmailCircuitBreaker.is_tripped(db, provider_name)
     provider_status = {
         "provider_name": provider_name,
         "is_paused": setting.is_paused if setting else False,
         "circuit_breaker_tripped": cb_tripped,
         "pause_reason": setting.pause_reason if setting else None,
-        "consecutive_failures": setting.consecutive_failures if setting else 0
+        "consecutive_failures": setting.consecutive_failures if setting else 0,
+        "current_active_sender": aggregate_quota.get("current_active_sender", "Default")
     }
 
     return {
-        "quota": quota_info,
+        "quota": aggregate_quota,
         "metrics": metrics,
         "provider_status": provider_status,
-        "active_campaigns": camp_responses
+        "active_campaigns": camp_responses,
+        "accounts": aggregate_quota.get("accounts_breakdown", [])
     }
 
 # ---------------------------------------------------------------------------
@@ -449,7 +453,164 @@ def delete_suppression(suppression_id: int, db: Session = Depends(get_db)):
     return {"message": "Suppression entry removed"}
 
 # ---------------------------------------------------------------------------
-# SETTINGS & CIRCUIT BREAKER
+# MULTI-ACCOUNT SENDER CONFIGURATIONS (UP TO 10 ACCOUNTS & AUTO-ROTATION)
+# ---------------------------------------------------------------------------
+
+def _format_account_response(session: Session, acc: EmailProviderSetting) -> EmailAccountResponse:
+    q = EmailQuotaManager.get_account_quota_status(session, acc)
+    base = ProviderSettingResponse.model_validate(acc).model_dump()
+    base["used_today"] = q.get("used_count", 0)
+    base["remaining_today"] = q.get("remaining_count", 0)
+    base["effective_limit"] = q.get("effective_limit", 0)
+    base["percent_used"] = q.get("percent_used", 0.0)
+    base["is_exhausted"] = q.get("is_exhausted", False)
+    return EmailAccountResponse(**base)
+
+@router.get("/accounts", response_model=List[EmailAccountResponse])
+def list_email_accounts(db: Session = Depends(get_db)):
+    """Lists all configured sender email accounts (up to 10) ordered by priority."""
+    accounts = db.query(EmailProviderSetting).order_by(
+        EmailProviderSetting.priority.asc(),
+        EmailProviderSetting.id.asc()
+    ).all()
+    if not accounts:
+        default_acc = EmailProviderSetting()
+        db.add(default_acc)
+        db.commit()
+        db.refresh(default_acc)
+        accounts = [default_acc]
+    return [_format_account_response(db, a) for a in accounts]
+
+@router.post("/accounts", response_model=EmailAccountResponse)
+def create_email_account(data: EmailAccountCreate, db: Session = Depends(get_db)):
+    """Creates a new email sending configuration. Max 10 accounts allowed."""
+    count = db.query(EmailProviderSetting).count()
+    if count >= 10:
+        raise HTTPException(
+            status_code=400,
+            detail="Đã đạt giới hạn tối đa 10 cấu hình email gửi. Vui lòng chỉnh sửa hoặc xóa bớt cấu hình hiện có."
+        )
+
+    new_acc = EmailProviderSetting(
+        name=data.name,
+        priority=data.priority,
+        is_active=data.is_active,
+        provider_name=data.provider_name,
+        smtp_host=data.smtp_host,
+        smtp_port=data.smtp_port,
+        smtp_username=data.smtp_username,
+        smtp_password=data.smtp_password,
+        use_ssl=data.use_ssl,
+        use_tls=data.use_tls,
+        from_email=data.from_email,
+        from_name=data.from_name,
+        reply_to=data.reply_to,
+        daily_limit=data.daily_limit,
+        safety_margin_pct=data.safety_margin_pct,
+        hourly_limit=data.hourly_limit,
+        min_delay_seconds=data.min_delay_seconds,
+        max_delay_seconds=data.max_delay_seconds,
+        sending_window_start=data.sending_window_start,
+        sending_window_end=data.sending_window_end
+    )
+    db.add(new_acc)
+    db.commit()
+    db.refresh(new_acc)
+
+    EmailAuditLogger.log(db, action="CREATE_ACCOUNT", metadata={"id": new_acc.id, "name": new_acc.name, "email": new_acc.from_email})
+    return _format_account_response(db, new_acc)
+
+@router.get("/accounts/{account_id}", response_model=EmailAccountResponse)
+def get_email_account(account_id: int, db: Session = Depends(get_db)):
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+    return _format_account_response(db, acc)
+
+@router.put("/accounts/{account_id}", response_model=EmailAccountResponse)
+def update_email_account(account_id: int, data: EmailAccountUpdate, db: Session = Depends(get_db)):
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    update_dict = data.model_dump(exclude_unset=True)
+    for k, v in update_dict.items():
+        setattr(acc, k, v)
+
+    db.commit()
+    db.refresh(acc)
+    EmailAuditLogger.log(db, action="UPDATE_ACCOUNT", metadata={"id": acc.id, "updates": update_dict})
+    return _format_account_response(db, acc)
+
+@router.delete("/accounts/{account_id}")
+def delete_email_account(account_id: int, db: Session = Depends(get_db)):
+    count = db.query(EmailProviderSetting).count()
+    if count <= 1:
+        raise HTTPException(status_code=400, detail="Không thể xóa cấu hình duy nhất. Hệ thống cần ít nhất 1 tài khoản gửi.")
+
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    name = acc.name
+    db.delete(acc)
+    db.commit()
+    EmailAuditLogger.log(db, action="DELETE_ACCOUNT", metadata={"id": account_id, "name": name})
+    return {"message": f"Đã xóa cấu hình '{name}' thành công."}
+
+@router.post("/accounts/{account_id}/toggle-active", response_model=EmailAccountResponse)
+def toggle_email_account_active(account_id: int, db: Session = Depends(get_db)):
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    acc.is_active = not acc.is_active
+    db.commit()
+    db.refresh(acc)
+    EmailAuditLogger.log(db, action="TOGGLE_ACCOUNT_ACTIVE", metadata={"id": acc.id, "is_active": acc.is_active})
+    return _format_account_response(db, acc)
+
+@router.post("/accounts/{account_id}/test-connection")
+async def test_account_smtp_connection(account_id: int, db: Session = Depends(get_db)):
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    if acc.provider_name == "MockEmailProvider":
+        provider = MockEmailProvider()
+    else:
+        provider = HostingerSMTPProvider(
+            smtp_host=acc.smtp_host,
+            smtp_port=acc.smtp_port,
+            smtp_username=acc.smtp_username,
+            smtp_password=acc.smtp_password,
+            use_ssl=acc.use_ssl,
+            use_tls=acc.use_tls
+        )
+    
+    success = await provider.verify_connection()
+    return {
+        "success": success,
+        "account_id": acc.id,
+        "account_name": acc.name,
+        "message": f"Kết nối máy chủ SMTP của tài khoản '{acc.name}' thành công!" if success else f"Không thể kết nối đến máy chủ SMTP của tài khoản '{acc.name}'."
+    }
+
+@router.post("/accounts/{account_id}/reset-circuit-breaker")
+def reset_account_circuit_breaker(account_id: int, db: Session = Depends(get_db)):
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    acc.consecutive_failures = 0
+    acc.is_paused = False
+    acc.pause_reason = None
+    db.commit()
+    EmailAuditLogger.log(db, action="RESET_ACCOUNT_CIRCUIT_BREAKER", metadata={"id": acc.id})
+    return {"message": f"Đã reset trạng thái Circuit Breaker cho tài khoản '{acc.name}'"}
+
+# ---------------------------------------------------------------------------
+# SETTINGS & CIRCUIT BREAKER (LEGACY / PRIMARY ALIASES)
 # ---------------------------------------------------------------------------
 
 @router.get("/settings", response_model=ProviderSettingResponse)

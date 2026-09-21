@@ -410,5 +410,150 @@ class TestEmailCampaign(unittest.TestCase):
             self.assertIn("Emergency stop", setting.pause_reason)
 
 
+    def test_13_create_multiple_email_accounts_max_10(self):
+        """Test creating multiple email sending accounts up to 10 max, and blocking 11th"""
+        with SessionLocal() as db:
+            db.query(EmailProviderSetting).delete()
+            db.commit()
+
+        # Create 10 accounts
+        for i in range(1, 11):
+            res = self.client.post("/api/email/accounts", json={
+                "name": f"Account {i}",
+                "priority": i,
+                "is_active": True,
+                "provider_name": "MockEmailProvider",
+                "smtp_host": f"smtp{i}.hostinger.com",
+                "smtp_port": 465,
+                "smtp_username": f"user{i}@aesthetichub.vn",
+                "from_email": f"sender{i}@aesthetichub.vn",
+                "from_name": f"Sender {i}",
+                "daily_limit": 100 * i
+            })
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.json()["name"], f"Account {i}")
+
+        # Try to create 11th account -> should fail with 400
+        res11 = self.client.post("/api/email/accounts", json={
+            "name": "Account 11",
+            "priority": 11,
+            "smtp_username": "user11@aesthetichub.vn",
+            "from_email": "sender11@aesthetichub.vn"
+        })
+        self.assertEqual(res11.status_code, 400)
+        self.assertIn("10", res11.json()["detail"])
+
+    def test_14_auto_rotation_when_first_account_quota_exhausted(self):
+        """Test auto-rotation: when Account #1 exhausts its daily quota, worker automatically routes to Account #2"""
+        with SessionLocal() as db:
+            db.query(EmailProviderSetting).delete()
+            
+            # Account 1: daily_limit = 1 (effective limit = 1 with 0% margin)
+            acc1 = EmailProviderSetting(
+                name="Account 1 (Small Quota)",
+                priority=1,
+                is_active=True,
+                provider_name="MockEmailProvider",
+                from_email="outreach1@aesthetichub.vn",
+                from_name="Outreach 1",
+                daily_limit=1,
+                safety_margin_pct=0.0
+            )
+            # Account 2: daily_limit = 100
+            acc2 = EmailProviderSetting(
+                name="Account 2 (Backup)",
+                priority=2,
+                is_active=True,
+                provider_name="MockEmailProvider",
+                from_email="outreach2@aesthetichub.vn",
+                from_name="Outreach 2",
+                daily_limit=100,
+                safety_margin_pct=0.0
+            )
+            db.add_all([acc1, acc2])
+            
+            # Create a running campaign with 2 recipients
+            camp = EmailCampaign(name="Rotation Test Campaign", subject="Welcome {{name}}", from_email="outreach@aesthetichub.vn", status="RUNNING", total_recipients=2, remaining_count=2)
+            db.add(camp)
+            db.commit()
+            db.refresh(camp)
+            db.refresh(acc1)
+            db.refresh(acc2)
+
+            r1 = EmailCampaignRecipient(campaign_id=camp.id, email="doc1@hospital.vn", name="Doc 1", status="QUEUED")
+            r2 = EmailCampaignRecipient(campaign_id=camp.id, email="doc2@hospital.vn", name="Doc 2", status="QUEUED")
+            db.add_all([r1, r2])
+            db.commit()
+            db.refresh(r1)
+            db.refresh(r2)
+
+            j1 = EmailJob(campaign_id=camp.id, recipient_id=r1.id, status="PENDING", available_at=datetime.utcnow())
+            j2 = EmailJob(campaign_id=camp.id, recipient_id=r2.id, status="PENDING", available_at=datetime.utcnow())
+            db.add_all([j1, j2])
+            db.commit()
+
+        worker = EmailWorker(provider=MockEmailProvider(), enable_delay=False)
+
+        # Send First Job: should be processed by Account 1
+        with SessionLocal() as db:
+            job1 = worker.acquire_next_job(db, "w1")
+            res1 = asyncio.run(worker.process_job(db, job1))
+            self.assertEqual(res1["status"], "SENT")
+            self.assertEqual(res1["sender_account"], "Account 1 (Small Quota)")
+
+        # Send Second Job: Account 1 is now exhausted (1/1), so worker must AUTO-ROTATE to Account 2!
+        with SessionLocal() as db:
+            job2 = worker.acquire_next_job(db, "w1")
+            res2 = asyncio.run(worker.process_job(db, job2))
+            self.assertEqual(res2["status"], "SENT")
+            self.assertEqual(res2["sender_account"], "Account 2 (Backup)")
+
+    def test_15_all_accounts_exhausted_pauses_safely(self):
+        """Test when all active accounts exhaust quota, job pauses safely as PENDING without error"""
+        with SessionLocal() as db:
+            db.query(EmailProviderSetting).delete()
+            
+            # Account 1: limit 1, exhausted
+            acc1 = EmailProviderSetting(
+                name="Acc 1",
+                priority=1,
+                is_active=True,
+                provider_name="MockEmailProvider",
+                daily_limit=1,
+                safety_margin_pct=0.0
+            )
+            db.add(acc1)
+            db.commit()
+            db.refresh(acc1)
+
+            # Consume the quota on Account 1
+            EmailQuotaManager.reserve_quota(db, provider=f"account_{acc1.id}", count=1)
+            EmailQuotaManager.commit_quota(db, provider=f"account_{acc1.id}", count=1)
+
+            camp = EmailCampaign(name="Exhausted Test", subject="Hello", from_email="outreach@aesthetichub.vn", status="RUNNING")
+            db.add(camp)
+            db.commit()
+            db.refresh(camp)
+
+            r = EmailCampaignRecipient(campaign_id=camp.id, email="dr@test.vn", status="QUEUED")
+            db.add(r)
+            db.commit()
+            db.refresh(r)
+
+            j = EmailJob(campaign_id=camp.id, recipient_id=r.id, status="PENDING", available_at=datetime.utcnow())
+            db.add(j)
+            db.commit()
+
+        worker = EmailWorker(provider=MockEmailProvider(), enable_delay=False)
+        with SessionLocal() as db:
+            job = worker.acquire_next_job(db, "w1")
+            res = asyncio.run(worker.process_job(db, job))
+            self.assertEqual(res["status"], "ALL_ACCOUNTS_QUOTA_EXHAUSTED")
+            
+            db.refresh(job)
+            self.assertEqual(job.status, "PENDING")
+            self.assertIsNone(job.locked_at)
+
+
 if __name__ == '__main__':
     unittest.main()
