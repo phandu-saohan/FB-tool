@@ -30,7 +30,8 @@ import {
   Phone,
   MessageSquare,
   Download,
-  Sparkles
+  Sparkles,
+  Info
 } from 'lucide-react';
 import {
   getEmailDashboard,
@@ -364,8 +365,19 @@ export default function EmailView() {
 
   const handleProcessBatchNow = async () => {
     try {
-      const res = await processEmailBatchNow({ max_batch: 5, enable_delay: false });
-      showNotification(`Đã thực hiện gửi thử nghiệm 1 lượt (${res.data.processed_count} email đã xử lý)`);
+      const res = await processEmailBatchNow({ max_batch: 5, enable_delay: true });
+      const results = res.data.results || [];
+      const rateLimited = results.find(r => r.status === 'RATE_LIMIT_COOLDOWN');
+      if (rateLimited) {
+        showNotification(
+          `Máy chủ Hostinger thông báo giới hạn tốc độ (451 Ratelimit). Hệ thống đang tự động tạm nghỉ 15 phút để hạ nhiệt SMTP (${rateLimited.account}).`,
+          true
+        );
+      } else if (res.data.processed_count > 0) {
+        showNotification(`Đã thực hiện gửi ${res.data.processed_count} email với độ trễ giãn cách an toàn.`);
+      } else {
+        showNotification('Không có email nào đang chờ hoặc tài khoản gửi đang trong thời gian hạ nhiệt / hết quota hôm nay.');
+      }
       loadAllData();
       if (activeSubTab === 'queue') loadQueue();
     } catch (err) {
@@ -1292,6 +1304,31 @@ export default function EmailView() {
             </div>
           </div>
 
+          {/* Hostinger SMTP Best Practices Guide Box */}
+          <div className="bg-blue-50/80 border border-blue-200 rounded-xl p-4 text-xs text-blue-900 flex items-start gap-3 shadow-xs">
+            <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
+            <div className="space-y-1.5 flex-1">
+              <p className="font-bold text-blue-950 text-sm">💡 Khuyến nghị cấu hình an toàn cho máy chủ Hostinger SMTP:</p>
+              <p className="text-blue-800 text-xs leading-relaxed">
+                Hostinger áp dụng hệ thống bảo vệ chống spam (<code>hostinger_out_ratelimit</code>) với ngưỡng thông thường <b>50 - 100 email/giờ</b> và giới hạn đột biến khoảng 5-10 email/phút. Nếu vượt ngưỡng, máy chủ sẽ trả về lỗi tạm thời <b>451 Ratelimit</b>. Để chiến dịch chạy mượt mà 100%:
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1 font-medium text-[11px]">
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs">
+                  <span className="text-slate-500 block">Giới hạn/Giờ khuyến nghị:</span>
+                  <span className="font-bold text-blue-700">30 - 40 email/giờ</span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs">
+                  <span className="text-slate-500 block">Độ trễ giãn cách an toàn:</span>
+                  <span className="font-bold text-blue-700">20 - 45 giây</span>
+                </div>
+                <div className="bg-white p-2 rounded-lg border border-blue-100 shadow-2xs">
+                  <span className="text-slate-500 block">Tự động xoay vòng:</span>
+                  <span className="font-bold text-emerald-700">Thêm 2 - 3 tài khoản gửi</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
           {/* Accounts List Table / Cards */}
           <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
@@ -1407,8 +1444,15 @@ export default function EmailView() {
                               <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-500 border border-slate-200">
                                 VÔ HIỆU HÓA
                               </span>
+                            ) : acc.cooldown_until && new Date(acc.cooldown_until) > new Date() ? (
+                              <span
+                                className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300 inline-block"
+                                title={acc.pause_reason || `Tạm nghỉ đến ${new Date(acc.cooldown_until).toLocaleTimeString('vi-VN')}`}
+                              >
+                                HẠ NHIỆT (ĐẾN {new Date(acc.cooldown_until).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })})
+                              </span>
                             ) : acc.is_paused ? (
-                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200">
+                              <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-red-100 text-red-700 border border-red-200" title={acc.pause_reason || ''}>
                                 TẠM DỪNG (CB)
                               </span>
                             ) : acc.is_exhausted ? (
@@ -1461,12 +1505,12 @@ export default function EmailView() {
                                 <Edit className="w-3.5 h-3.5" />
                               </button>
 
-                              {/* Reset CB if paused */}
-                              {acc.is_paused && (
+                              {/* Reset CB / Cooldown if paused or cooling down */}
+                              {(acc.is_paused || (acc.cooldown_until && new Date(acc.cooldown_until) > new Date())) && (
                                 <button
                                   onClick={() => handleResetAccountCircuitBreaker(acc)}
                                   className="p-1.5 rounded text-amber-600 hover:bg-amber-50 transition border border-amber-200"
-                                  title="Reset lỗi Circuit Breaker"
+                                  title="Khôi phục trạng thái hoạt động ngay (Xóa Cooldown & Circuit Breaker)"
                                 >
                                   <ShieldCheck className="w-3.5 h-3.5" />
                                 </button>

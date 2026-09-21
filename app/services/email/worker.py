@@ -217,6 +217,20 @@ class EmailWorker:
         for acc in candidate_accounts:
             acc_key = f"account_{acc.id}"
 
+            # 3.0 Cooldown check (for Hostinger rate-limiting)
+            now_utc = datetime.utcnow()
+            if getattr(acc, 'cooldown_until', None):
+                if acc.cooldown_until > now_utc:
+                    mins_left = max(1, int((acc.cooldown_until - now_utc).total_seconds() / 60))
+                    skip_reasons.append(f"Account '{acc.name}' is cooling down ({mins_left}m remaining)")
+                    continue
+                else:
+                    # Cooldown expired, clear it
+                    acc.cooldown_until = None
+                    if "Ratelimit" in (acc.pause_reason or ""):
+                        acc.pause_reason = None
+                    session.commit()
+
             # 3.1 Circuit Breaker check
             if acc.is_paused:
                 skip_reasons.append(f"Account '{acc.name}' is paused ({acc.pause_reason or 'Circuit Breaker'})")
@@ -349,13 +363,15 @@ class EmailWorker:
             }
 
         else:
-            # Failed! Handle bounce or retry
-            job.attempts += 1
-            recipient.attempt_count += 1
+            # Failed! Handle bounce, rate limit cooldown, or retry
             recipient.last_attempt_at = now_time
             recipient.error_code = send_result.error_code
             recipient.error_message = send_result.error_message
             job.last_error = f"{send_result.error_code}: {send_result.error_message}"
+
+            if not getattr(send_result, 'is_rate_limited', False):
+                job.attempts += 1
+                recipient.attempt_count += 1
 
             # Check if permanent error (5xx or known bounce)
             if not send_result.is_temporary:
@@ -375,8 +391,59 @@ class EmailWorker:
                 session.commit()
                 return {"status": "BOUNCED_PERMANENT", "email": recipient.email, "error": send_result.error_message}
 
+            elif getattr(send_result, 'is_rate_limited', False):
+                # Rate limit backoff (Hostinger / SMTP 451 Ratelimit exceeded)
+                EmailQuotaManager.release_quota(session, selected_provider_key, count=1)
+
+                cooldown_minutes = 15
+                cooldown_until = now_time + timedelta(minutes=cooldown_minutes)
+                selected_account.cooldown_until = cooldown_until
+                time_display = (now_time + timedelta(hours=7, minutes=cooldown_minutes)).strftime('%H:%M:%S')
+                selected_account.pause_reason = (
+                    f"Hostinger Rate Limit (451): Tự động tạm nghỉ {cooldown_minutes} phút để hạ nhiệt máy chủ SMTP "
+                    f"đến {time_display}."
+                )
+
+                # Reschedule without burning attempts
+                job.status = 'RETRY'
+                job.available_at = cooldown_until
+                job.locked_at = None
+                job.locked_by = None
+                job.last_error = f"451 Hostinger Ratelimit: Tự động hạ nhiệt {cooldown_minutes} phút đến {time_display}"
+
+                recipient.status = 'RETRY'
+                recipient.next_retry_at = cooldown_until
+                recipient.error_code = send_result.error_code
+                recipient.error_message = f"Hostinger Rate Limit: Tự động thử lại lúc {time_display}"
+
+                EmailAuditLogger.log(
+                    session, action="SMTP_RATE_LIMIT_COOLDOWN",
+                    campaign_id=campaign.id, recipient_id=recipient.id,
+                    metadata={
+                        "account": selected_account.name,
+                        "from_email": selected_account.from_email,
+                        "cooldown_until": cooldown_until.isoformat(),
+                        "error": send_result.error_message
+                    }
+                )
+                session.commit()
+
+                logger.warning(
+                    f"[RATE_LIMIT_COOLDOWN] Account '{selected_account.name}' hit SMTP rate limit. "
+                    f"Cooling down for {cooldown_minutes}m until {cooldown_until}. Halting batch."
+                )
+
+                return {
+                    "status": "RATE_LIMIT_COOLDOWN",
+                    "email": recipient.email,
+                    "account": selected_account.name,
+                    "cooldown_minutes": cooldown_minutes,
+                    "retry_at": cooldown_until.isoformat(),
+                    "error": send_result.error_message
+                }
+
             else:
-                # Temporary error -> release reserved quota
+                # Other temporary error -> release reserved quota
                 EmailQuotaManager.release_quota(session, selected_provider_key, count=1)
                 EmailCircuitBreaker.record_failure(session, selected_account.provider_name, send_result.error_message or "")
 
@@ -419,7 +486,14 @@ class EmailWorker:
                 res = await self.process_job(session, job)
                 results.append(res)
 
-                # If quota exhausted or circuit breaker tripped or outside window, halt batch
-                if res.get("status") in ["DAILY_QUOTA_EXHAUSTED", "ALL_ACCOUNTS_QUOTA_EXHAUSTED", "PAUSED_CIRCUIT_BREAKER", "OUTSIDE_WINDOW", "HOURLY_LIMIT_REACHED"]:
+                # If rate-limited or quota exhausted or circuit breaker tripped or outside window, halt batch
+                if res.get("status") in [
+                    "RATE_LIMIT_COOLDOWN",
+                    "DAILY_QUOTA_EXHAUSTED",
+                    "ALL_ACCOUNTS_QUOTA_EXHAUSTED",
+                    "PAUSED_CIRCUIT_BREAKER",
+                    "OUTSIDE_WINDOW",
+                    "HOURLY_LIMIT_REACHED"
+                ]:
                     break
         return results

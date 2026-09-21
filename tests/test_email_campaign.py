@@ -19,6 +19,7 @@ from app.services.email.rate_limiter import EmailRateLimiter
 from app.services.email.circuit_breaker import EmailCircuitBreaker
 from app.services.email.suppression_service import EmailSuppressionService
 from app.services.email.providers.mock_email_provider import MockEmailProvider
+from app.services.email.providers.base_provider import EmailSendResult
 from app.services.email.worker import EmailWorker
 
 class TestEmailCampaign(unittest.TestCase):
@@ -61,6 +62,7 @@ class TestEmailCampaign(unittest.TestCase):
                 setting.is_paused = False
                 setting.consecutive_failures = 0
                 setting.pause_reason = None
+                setting.cooldown_until = None
             db.commit()
 
     def test_01_quota_calculation_and_safety_margin(self):
@@ -553,6 +555,79 @@ class TestEmailCampaign(unittest.TestCase):
             db.refresh(job)
             self.assertEqual(job.status, "PENDING")
             self.assertIsNone(job.locked_at)
+
+    def test_hostinger_rate_limit_backoff(self):
+        """Tests that 451 Hostinger Ratelimit puts the account into cooldown and reschedules the job without consuming attempts."""
+        class RateLimitedMockProvider(MockEmailProvider):
+            async def send(self, *args, **kwargs):
+                return EmailSendResult(
+                    success=False,
+                    error_code="451",
+                    error_message='4.7.1 Ratelimit "hostinger_out_ratelimit" exceeded for key "RLgocsyba5e7d659',
+                    is_temporary=True,
+                    is_rate_limited=True
+                )
+            async def verify_connection(self):
+                return True
+            def get_limits(self):
+                return {}
+            def get_health(self):
+                return {}
+
+        with SessionLocal() as db:
+            camp = EmailCampaign(
+                name="RateLimit Test Camp",
+                subject="Test Rate Limit",
+                from_email="outreach@aesthetichub.vn",
+                from_name="Test Sender",
+                status="RUNNING"
+            )
+            db.add(camp)
+            db.commit()
+            db.refresh(camp)
+
+            r = EmailCampaignRecipient(campaign_id=camp.id, email="rl_test@clinic.vn", name="Doctor Test", status="QUEUED")
+            db.add(r)
+            db.commit()
+            db.refresh(r)
+            recip_id = r.id
+
+            j = EmailJob(campaign_id=camp.id, recipient_id=r.id, status="PENDING", available_at=datetime.utcnow())
+            db.add(j)
+            db.commit()
+            db.refresh(j)
+
+            # Ensure setting has cooldown cleared
+            acc = db.query(EmailProviderSetting).first()
+            if acc:
+                acc.cooldown_until = None
+                acc.is_paused = False
+                db.commit()
+
+        mock_prov = RateLimitedMockProvider()
+        worker = EmailWorker(provider=mock_prov, enable_delay=False)
+
+        with SessionLocal() as db:
+            job = worker.acquire_next_job(db, "w_test")
+            self.assertIsNotNone(job)
+
+            res = asyncio.run(worker.process_job(db, job))
+            self.assertEqual(res["status"], "RATE_LIMIT_COOLDOWN")
+            self.assertEqual(res["cooldown_minutes"], 15)
+
+            db.refresh(job)
+            self.assertEqual(job.status, "RETRY")
+            self.assertEqual(job.attempts, 0) # Attempts should NOT be burned for SMTP rate limit
+            self.assertGreater(job.available_at, datetime.utcnow())
+
+            r_updated = db.query(EmailCampaignRecipient).filter_by(id=recip_id).first()
+            self.assertEqual(r_updated.status, "RETRY")
+            self.assertGreater(r_updated.next_retry_at, datetime.utcnow())
+
+            # Check account cooldown was set
+            acc = db.query(EmailProviderSetting).first()
+            self.assertIsNotNone(acc.cooldown_until)
+            self.assertGreater(acc.cooldown_until, datetime.utcnow())
 
 
 if __name__ == '__main__':

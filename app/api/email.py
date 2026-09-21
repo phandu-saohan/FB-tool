@@ -614,10 +614,10 @@ def retry_failed_jobs(campaign_id: Optional[int] = None, db: Session = Depends(g
 @router.post("/process-batch")
 async def process_batch_now(
     campaign_id: Optional[int] = None,
-    max_batch: int = 10,
-    enable_delay: bool = False
+    max_batch: int = 5,
+    enable_delay: bool = True
 ):
-    """Triggers an immediate worker batch execution."""
+    """Triggers an immediate worker batch execution with safe rate-limit delays."""
     worker = EmailWorker(enable_delay=enable_delay)
     results = await worker.run_batch(max_batch_size=max_batch, campaign_id=campaign_id)
     return {"processed_count": len(results), "results": results}
@@ -806,9 +806,25 @@ def reset_account_circuit_breaker(account_id: int, db: Session = Depends(get_db)
     acc.consecutive_failures = 0
     acc.is_paused = False
     acc.pause_reason = None
+    acc.cooldown_until = None
     db.commit()
     EmailAuditLogger.log(db, action="RESET_ACCOUNT_CIRCUIT_BREAKER", metadata={"id": acc.id})
-    return {"message": f"Đã reset trạng thái Circuit Breaker cho tài khoản '{acc.name}'"}
+    return {"message": f"Đã khôi phục trạng thái hoạt động bình thường cho tài khoản '{acc.name}' (xóa Circuit Breaker & Cooldown)"}
+
+@router.post("/accounts/{account_id}/reset-cooldown")
+def reset_account_cooldown(account_id: int, db: Session = Depends(get_db)):
+    """Manually clears Hostinger rate-limit cooldown for an account."""
+    acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Không tìm thấy cấu hình email gửi")
+
+    acc.cooldown_until = None
+    if "Ratelimit" in (acc.pause_reason or "") or "Rate Limit" in (acc.pause_reason or ""):
+        acc.pause_reason = None
+        acc.is_paused = False
+    db.commit()
+    EmailAuditLogger.log(db, action="RESET_ACCOUNT_COOLDOWN", metadata={"id": acc.id})
+    return {"message": f"Đã xóa hạ nhiệt và sẵn sàng gửi lại cho tài khoản '{acc.name}'"}
 
 # ---------------------------------------------------------------------------
 # SETTINGS & CIRCUIT BREAKER (LEGACY / PRIMARY ALIASES)

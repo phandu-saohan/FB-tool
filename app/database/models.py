@@ -410,6 +410,7 @@ class EmailProviderSetting(Base):
     consecutive_failures = Column(Integer, default=0)
     is_paused = Column(Boolean, default=False)
     pause_reason = Column(Text, nullable=True)
+    cooldown_until = Column(DateTime, nullable=True)
 
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

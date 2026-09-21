@@ -102,12 +102,23 @@ class HostingerSMTPProvider(EmailProvider):
             error_msg = str(e.smtp_error.decode("utf-8", errors="ignore") if isinstance(e.smtp_error, bytes) else e.smtp_error)
             # 4xx: Temporary failure; 5xx: Permanent failure
             is_temp = code.startswith("4") or code in ["421", "450", "451", "452"]
-            logger.warning(f"SMTP response error {code}: {error_msg}")
+            err_lower = error_msg.lower()
+            is_rate_limited = (
+                "ratelimit" in err_lower or
+                "rate limit" in err_lower or
+                "hostinger_out_ratelimit" in err_lower or
+                "too many" in err_lower or
+                "4.7.1" in error_msg or
+                "quota exceeded" in err_lower or
+                (code in ["451", "421", "452"] and any(k in err_lower for k in ["limit", "exceeded", "deferred", "slow down"]))
+            )
+            logger.warning(f"SMTP response error {code} (rate_limited={is_rate_limited}): {error_msg}")
             return EmailSendResult(
                 success=False,
                 error_code=code,
                 error_message=error_msg,
-                is_temporary=is_temp
+                is_temporary=is_temp,
+                is_rate_limited=is_rate_limited
             )
         except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, TimeoutError, OSError) as e:
             logger.warning(f"SMTP network/connection error: {str(e)}")

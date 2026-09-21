@@ -190,6 +190,7 @@ class ProviderSettingResponse(BaseModel):
     consecutive_failures: int
     is_paused: bool
     pause_reason: Optional[str] = None
+    cooldown_until: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 

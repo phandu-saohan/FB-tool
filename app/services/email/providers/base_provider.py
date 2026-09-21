@@ -8,13 +8,15 @@ class EmailSendResult:
         message_id: Optional[str] = None,
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
-        is_temporary: bool = False
+        is_temporary: bool = False,
+        is_rate_limited: bool = False
     ):
         self.success = success
         self.message_id = message_id
         self.error_code = error_code
         self.error_message = error_message
         self.is_temporary = is_temporary
+        self.is_rate_limited = is_rate_limited
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -22,7 +24,8 @@ class EmailSendResult:
             "message_id": self.message_id,
             "error_code": self.error_code,
             "error_message": self.error_message,
-            "is_temporary": self.is_temporary
+            "is_temporary": self.is_temporary,
+            "is_rate_limited": self.is_rate_limited
         }
 
 
