@@ -89,10 +89,29 @@ async def post_to_facebook_target(
         await assert_no_checkpoint(page)
 
         # 3. Check for permission / find composer trigger
+        if target_type == 'page':
+            # Check if Facebook is prompting to switch profile to Page
+            switch_btn = await page.query_selector(
+                'div[aria-label*="Chuyển ngay"], '
+                'div[aria-label*="Switch now"], '
+                'div[role="button"]:has-text("Chuyển ngay"), '
+                'div[role="button"]:has-text("Switch now"), '
+                'div[role="button"]:has-text("Chuyển sang trang"), '
+                'div[role="button"]:has-text("Chuyển trang")'
+            )
+            if switch_btn and await switch_btn.is_visible():
+                log_info('POSTING', 'Phát hiện nút chuyển sang Profile của Trang. Đang chuyển đổi...')
+                try:
+                    await switch_btn.click()
+                    await SafeRateLimiter.human_delay(3.0, 5.0)
+                    await assert_no_checkpoint(page)
+                except Exception as e:
+                    log_warning('POSTING', f'Không thể tự động bấm chuyển trang: {e}')
+
         composer_trigger = await _find_composer_trigger(page)
 
-        # If not found on initial view, check if we are on 'Giới thiệu' (About) and switch to 'Thảo luận' (Discussion)
-        if not composer_trigger:
+        # If not found on initial view (for groups), check if we are on 'Giới thiệu' (About) and switch to 'Thảo luận' (Discussion)
+        if not composer_trigger and target_type == 'group':
             disc_tab = await page.query_selector(
                 'a[role="tab"]:has-text("Thảo luận"), '
                 'a[role="tab"]:has-text("Discussion"), '
@@ -105,8 +124,13 @@ async def post_to_facebook_target(
                 await SafeRateLimiter.human_delay(2.0, 3.5)
                 composer_trigger = await _find_composer_trigger(page)
 
-        # If still not found, diagnose group membership status
+        # If still not found, diagnose target status
         if not composer_trigger:
+            if target_type == 'page':
+                err_msg = 'Không tìm thấy khung tạo bài viết trên Trang này. Để đăng bài lên Facebook Page, tài khoản cần là Quản trị viên/Biên tập viên của Trang hoặc đã chuyển đổi sang Profile Trang.'
+                log_warning('POSTING', err_msg)
+                return False, None, err_msg
+
             # Check if pending approval
             pending_notice = await page.query_selector(
                 'span:has-text("chờ xử lý"), span:has-text("chờ phê duyệt"), '

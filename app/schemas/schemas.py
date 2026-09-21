@@ -46,14 +46,29 @@ class FacebookPageBase(BaseModel):
     selected: bool = False
     status: str = 'ACTIVE'
 
-class FacebookPageCreate(FacebookPageBase):
-    pass
+class FacebookPageCreate(BaseModel):
+    url: str
+    name: Optional[str] = None
+    facebook_id: Optional[str] = None
+    description: Optional[str] = None
+    followers: Optional[str] = None
+    category: Optional[str] = 'Page'
+    location: Optional[str] = None
+    keyword: Optional[str] = None
+    selected: bool = False
+    status: str = 'ACTIVE'
+
+class FacebookPageBatchCreate(BaseModel):
+    urls: List[str]
+    category: Optional[str] = 'Page'
+    keyword: Optional[str] = None
 
 class FacebookPageUpdate(BaseModel):
     name: Optional[str] = None
     selected: Optional[bool] = None
     status: Optional[str] = None
     followers: Optional[str] = None
+    category: Optional[str] = None
 
 class FacebookPageResponse(FacebookPageBase):
     id: int

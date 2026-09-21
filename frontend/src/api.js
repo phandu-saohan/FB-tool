@@ -24,6 +24,9 @@ export const selectAllGroups = (selected) => api.post(`/groups/select-all?select
 export const bulkSelectGroups = (ids, selected) => api.post(`/groups/bulk-select?selected=${selected}`, ids);
 
 export const getPages = (params) => api.get('/pages', { params });
+export const createPage = (data) => api.post('/pages', data);
+export const batchCreatePages = (data) => api.post('/pages/batch', data);
+export const syncManagedPages = (max_results = 100) => api.post(`/pages/sync-managed?max_results=${max_results}`, null, { timeout: 300000 });
 export const searchPages = (keyword, max_results = 50) => api.post('/pages/search', { keyword, max_results }, { timeout: 300000 });
 export const updatePage = (id, data) => api.put(`/pages/${id}`, data);
 export const deletePage = (id) => api.delete(`/pages/${id}`);

@@ -3,8 +3,14 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from app.database.database import get_db
 from app.services.page_service import page_service
-from app.automation.facebook_page import search_facebook_pages
-from app.schemas.schemas import FacebookPageResponse, FacebookPageUpdate, SearchRequest
+from app.automation.facebook_page import search_facebook_pages, fetch_managed_facebook_pages
+from app.schemas.schemas import (
+    FacebookPageResponse, 
+    FacebookPageCreate, 
+    FacebookPageBatchCreate, 
+    FacebookPageUpdate, 
+    SearchRequest
+)
 
 router = APIRouter(prefix="/pages", tags=["Pages"])
 
@@ -16,6 +22,35 @@ def get_pages(
     db: Session = Depends(get_db)
 ):
     return page_service.get_all_pages(db, keyword, status, only_selected)
+
+@router.post("", response_model=FacebookPageResponse)
+def create_page(page_data: FacebookPageCreate, db: Session = Depends(get_db)):
+    """Creates a new Facebook Page record manually"""
+    if not page_data.url or not page_data.url.strip():
+        raise HTTPException(status_code=400, detail="Đường dẫn URL của Trang là bắt buộc.")
+    return page_service.create_page(db, page_data)
+
+@router.post("/batch")
+def batch_create_pages(batch_data: FacebookPageBatchCreate, db: Session = Depends(get_db)):
+    """Imports multiple Facebook Pages from a list of URLs"""
+    if not batch_data.urls:
+        raise HTTPException(status_code=400, detail="Danh sách URL không được để trống.")
+    return page_service.batch_create_pages(
+        db, 
+        urls=batch_data.urls, 
+        category=batch_data.category or 'Page', 
+        keyword=batch_data.keyword or 'Batch Import'
+    )
+
+@router.api_route("/sync-managed", methods=["GET", "POST"])
+async def sync_managed_pages(max_results: int = Query(100, ge=5, le=300)):
+    """Automatically connects to Facebook and syncs all Pages managed by the logged-in account"""
+    results = await fetch_managed_facebook_pages(max_results=max_results)
+    return {
+        "message": f"Đồng bộ thành công {len(results)} trang bạn quản lý.",
+        "count": len(results),
+        "results": results
+    }
 
 @router.post("/search")
 async def search_pages(req: SearchRequest):
