@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Bold, 
   Italic, 
@@ -23,7 +23,13 @@ import {
   Check, 
   Palette,
   Phone,
-  MessageSquare
+  MessageSquare,
+  Code,
+  Copy,
+  CheckCheck,
+  Wand2,
+  FileCode,
+  RotateCcw
 } from 'lucide-react';
 
 const EMAIL_TEMPLATES = [
@@ -146,6 +152,101 @@ const EMAIL_TEMPLATES = [
   }
 ];
 
+const HTML_STARTER_TEMPLATE = `<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{subject}}</title>
+</head>
+<body style="margin: 0; padding: 24px 0; background-color: #f1f5f9; font-family: 'Segoe UI', Arial, sans-serif;">
+  <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%">
+    <tr>
+      <td align="center">
+        <!-- Container 600px -->
+        <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="600" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+          <!-- Header Banner -->
+          <tr>
+            <td style="padding: 32px 24px; background: linear-gradient(135deg, #2563eb, #1d4ed8); text-align: center; color: #ffffff;">
+              <h1 style="margin: 0; font-size: 24px; font-weight: bold; letter-spacing: -0.5px;">TIÊU ĐỀ EMAIL CỦA BẠN</h1>
+              <p style="margin: 8px 0 0; font-size: 14px; opacity: 0.9;">Thông điệp chính dành riêng cho {{name}}</p>
+            </td>
+          </tr>
+          
+          <!-- Content Body -->
+          <tr>
+            <td style="padding: 32px 24px; color: #334155; font-size: 15px; line-height: 1.6;">
+              <p style="margin-top: 0;">Xin chào <strong>{{name}}</strong>,</p>
+              <p>Đây là nội dung email được thiết kế chuẩn HTML responsive, tương thích hoàn hảo trên mọi ứng dụng email (Gmail, Outlook, Apple Mail, v.v.).</p>
+              
+              <!-- Callout Box -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 24px 0; background-color: #f8fafc; border-left: 4px solid #2563eb; border-radius: 0 8px 8px 0;">
+                <tr>
+                  <td style="padding: 16px;">
+                    <strong style="color: #1e40af; font-size: 14px;">📌 THÔNG TIN KHÁCH HÀNG:</strong>
+                    <div style="font-size: 13px; color: #475569; margin-top: 6px;">
+                      • Họ và tên: <strong>{{name}}</strong><br>
+                      • Email nhận tin: <strong>{{email}}</strong><br>
+                      • Số điện thoại (Zalo OA): <strong>{{phone}}</strong>
+                    </div>
+                  </td>
+                </tr>
+              </table>
+              
+              <!-- Button CTA -->
+              <table role="presentation" border="0" cellpadding="0" cellspacing="0" width="100%" style="margin: 28px 0;">
+                <tr>
+                  <td align="center">
+                    <a href="https://yourwebsite.com" target="_blank" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 15px; box-shadow: 0 4px 6px -1px rgba(37, 99, 235, 0.2);">BẤM VÀO ĐÂY ĐỂ TIẾP TỤC</a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="font-size: 13px; color: #64748b; margin-bottom: 0;">Nếu Quý khách có bất kỳ câu hỏi nào, vui lòng phản hồi email này hoặc liên hệ qua Zalo OA.</p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 20px 24px; background-color: #f8fafc; border-top: 1px solid #e2e8f0; text-align: center; font-size: 12px; color: #94a3b8;">
+              <p style="margin: 0;">© 2026 Tên Doanh Nghiệp. Mọi quyền được bảo lưu.</p>
+              <p style="margin: 4px 0 0;">Email được gửi tự động tới {{email}}.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+// Helper: formats and indents HTML code nicely
+function formatHtmlCode(html) {
+  if (!html) return '';
+  let formatted = '';
+  let indent = 0;
+  const tab = '  ';
+  const tokens = html.replace(/>\s*</g, '><').match(/(<[^>]+>|[^<]+)/g) || [];
+  
+  tokens.forEach(token => {
+    if (token.startsWith('</')) {
+      indent = Math.max(0, indent - 1);
+      formatted += tab.repeat(indent) + token + '\n';
+    } else if (token.startsWith('<') && !token.startsWith('<!') && !token.endsWith('/>') && !['<br>', '<hr>', '<img>', '<input>', '<meta>', '<link>'].some(t => token.toLowerCase().startsWith(t))) {
+      formatted += tab.repeat(indent) + token + '\n';
+      indent++;
+    } else if (token.startsWith('<')) {
+      formatted += tab.repeat(indent) + token + '\n';
+    } else {
+      const text = token.trim();
+      if (text) {
+        formatted += tab.repeat(indent) + text + '\n';
+      }
+    }
+  });
+  return formatted.trim();
+}
+
 export default function EmailRichEditor({ 
   contentHtml, 
   onChangeHtml, 
@@ -154,10 +255,13 @@ export default function EmailRichEditor({
   previewText,
   onChangePreviewText
 }) {
-  const [activeTab, setActiveTab] = useState('editor'); // 'editor', 'preview-desktop', 'preview-mobile'
+  const [activeTab, setActiveTab] = useState('editor'); // 'editor', 'html', 'preview-desktop', 'preview-mobile'
   const [mockData, setMockData] = useState(true);
   const [showTemplateMenu, setShowTemplateMenu] = useState(false);
+  const [copiedHtml, setCopiedHtml] = useState(false);
+  
   const editorRef = useRef(null);
+  const htmlTextareaRef = useRef(null);
 
   // Sample data for live preview
   const SAMPLE_DATA = {
@@ -174,20 +278,53 @@ export default function EmailRichEditor({
     }
   };
 
+  const handleTabChange = (newTab) => {
+    // If leaving visual editor, save latest content
+    if (activeTab === 'editor' && editorRef.current) {
+      onChangeHtml(editorRef.current.innerHTML);
+    }
+    // If entering visual editor, sync HTML into contentEditable
+    if (newTab === 'editor') {
+      setTimeout(() => {
+        if (editorRef.current) {
+          editorRef.current.innerHTML = contentHtml || '';
+        }
+      }, 0);
+    }
+    setActiveTab(newTab);
+  };
+
   const insertVariable = (varName) => {
     const tag = `{{${varName}}}`;
-    // Insert text at cursor position or append
-    const selection = window.getSelection();
-    if (selection.rangeCount > 0 && editorRef.current?.contains(selection.anchorNode)) {
-      const range = selection.getRangeAt(0);
-      range.deleteContents();
-      range.insertNode(document.createTextNode(tag));
-      range.collapse(false);
+    if (activeTab === 'html') {
+      const textarea = htmlTextareaRef.current;
+      if (textarea) {
+        const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
+        const currentText = contentHtml || '';
+        const newText = currentText.substring(0, start) + tag + currentText.substring(end);
+        onChangeHtml(newText);
+        setTimeout(() => {
+          textarea.focus();
+          textarea.setSelectionRange(start + tag.length, start + tag.length);
+        }, 0);
+      } else {
+        onChangeHtml((contentHtml || '') + tag);
+      }
     } else {
-      executeCommand('insertText', tag);
-    }
-    if (editorRef.current) {
-      onChangeHtml(editorRef.current.innerHTML);
+      // Visual Editor mode
+      const selection = window.getSelection();
+      if (selection.rangeCount > 0 && editorRef.current?.contains(selection.anchorNode)) {
+        const range = selection.getRangeAt(0);
+        range.deleteContents();
+        range.insertNode(document.createTextNode(tag));
+        range.collapse(false);
+      } else {
+        executeCommand('insertText', tag);
+      }
+      if (editorRef.current) {
+        onChangeHtml(editorRef.current.innerHTML);
+      }
     }
   };
 
@@ -203,6 +340,29 @@ export default function EmailRichEditor({
       editorRef.current.innerHTML = tpl.html;
     }
     setShowTemplateMenu(false);
+  };
+
+  const handleCopyHtml = () => {
+    navigator.clipboard.writeText(contentHtml || '');
+    setCopiedHtml(true);
+    setTimeout(() => setCopiedHtml(false), 2000);
+  };
+
+  const handleFormatHtml = () => {
+    const formatted = formatHtmlCode(contentHtml || '');
+    onChangeHtml(formatted);
+  };
+
+  const handleInsertBoilerplate = () => {
+    if (contentHtml && contentHtml.trim().length > 0) {
+      if (!confirm('Thao tác này sẽ thay thế nội dung hiện tại bằng mẫu khung HTML chuẩn. Bạn có muốn tiếp tục?')) {
+        return;
+      }
+    }
+    onChangeHtml(HTML_STARTER_TEMPLATE);
+    if (editorRef.current) {
+      editorRef.current.innerHTML = HTML_STARTER_TEMPLATE;
+    }
   };
 
   const getRenderedHtml = () => {
@@ -226,28 +386,45 @@ export default function EmailRichEditor({
     return sub;
   };
 
+  const lineCount = (contentHtml || '').split('\n').length;
+  const charCount = (contentHtml || '').length;
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-xs overflow-hidden flex flex-col">
       {/* Top Header Toolbar */}
       <div className="px-4 py-3 bg-slate-50/90 border-b border-slate-200 flex flex-wrap items-center justify-between gap-3">
-        {/* Left: View Tabs */}
+        {/* Left: View Tabs (Visual Editor, HTML Source Code, Desktop Preview, Mobile Preview) */}
         <div className="flex items-center space-x-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
           <button
             type="button"
-            onClick={() => setActiveTab('editor')}
-            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            onClick={() => handleTabChange('editor')}
+            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'editor' 
                 ? 'bg-blue-600 text-white shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
             }`}
           >
             <Edit3 className="w-3.5 h-3.5" />
-            <span>Soạn thảo Rich Text</span>
+            <span>Soạn thảo Trực quan</span>
           </button>
+
           <button
             type="button"
-            onClick={() => setActiveTab('preview-desktop')}
-            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            onClick={() => handleTabChange('html')}
+            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
+              activeTab === 'html' 
+                ? 'bg-indigo-600 text-white shadow-xs' 
+                : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
+            }`}
+          >
+            <Code className="w-3.5 h-3.5" />
+            <span>Mã nguồn HTML</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => handleTabChange('preview-desktop')}
+            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'preview-desktop' 
                 ? 'bg-blue-600 text-white shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -256,10 +433,11 @@ export default function EmailRichEditor({
             <Monitor className="w-3.5 h-3.5" />
             <span>Xem trước Desktop</span>
           </button>
+
           <button
             type="button"
-            onClick={() => setActiveTab('preview-mobile')}
-            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            onClick={() => handleTabChange('preview-mobile')}
+            className={`inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition cursor-pointer ${
               activeTab === 'preview-mobile' 
                 ? 'bg-blue-600 text-white shadow-xs' 
                 : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100'
@@ -272,7 +450,7 @@ export default function EmailRichEditor({
 
         {/* Right: Template Selector & Mock Data Toggle */}
         <div className="flex items-center space-x-2.5">
-          {activeTab !== 'editor' && (
+          {(activeTab === 'preview-desktop' || activeTab === 'preview-mobile') && (
             <label className="inline-flex items-center space-x-1.5 text-xs text-slate-600 font-medium cursor-pointer">
               <input 
                 type="checkbox"
@@ -292,7 +470,7 @@ export default function EmailRichEditor({
               className="inline-flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-50 to-blue-50 hover:from-indigo-100 hover:to-blue-100 text-indigo-700 text-xs font-semibold rounded-xl border border-indigo-200 transition shadow-2xs"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-600" />
-              <span>Kho Mẫu Email Có Sẵn ({EMAIL_TEMPLATES.length})</span>
+              <span>Kho Mẫu Email ({EMAIL_TEMPLATES.length})</span>
             </button>
 
             {showTemplateMenu && (
@@ -317,54 +495,56 @@ export default function EmailRichEditor({
         </div>
       </div>
 
-      {/* Editor Mode */}
+      {/* Variable Chips Bar (Active in both Editor and HTML modes) */}
+      {(activeTab === 'editor' || activeTab === 'html') && (
+        <div className="px-4 py-2 bg-blue-50/40 border-b border-slate-100 flex items-center space-x-2 overflow-x-auto text-xs">
+          <span className="text-slate-500 font-medium flex items-center space-x-1 shrink-0">
+            <Tag className="w-3 h-3 text-blue-500" />
+            <span>Chèn biến cá nhân hoá:</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => insertVariable('name')}
+            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-mono font-semibold rounded-lg border border-blue-200 shadow-2xs transition"
+            title="Chèn tên khách hàng"
+          >
+            <span>{"{{name}}"}</span>
+            <span className="text-[10px] text-slate-400 font-sans">(Tên)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => insertVariable('phone')}
+            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 font-mono font-semibold rounded-lg border border-emerald-200 shadow-2xs transition"
+            title="Chèn số điện thoại khách hàng (Zalo OA)"
+          >
+            <Phone className="w-3 h-3 text-emerald-600" />
+            <span>{"{{phone}}"}</span>
+            <span className="text-[10px] text-emerald-600 font-sans font-medium">(Zalo SĐT)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => insertVariable('email')}
+            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-amber-50 text-amber-700 font-mono font-semibold rounded-lg border border-amber-200 shadow-2xs transition"
+            title="Chèn email người nhận"
+          >
+            <span>{"{{email}}"}</span>
+            <span className="text-[10px] text-slate-400 font-sans">(Email)</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => insertVariable('campaign')}
+            className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-mono font-semibold rounded-lg border border-slate-200 shadow-2xs transition"
+            title="Chèn tên chiến dịch"
+          >
+            <span>{"{{campaign}}"}</span>
+            <span className="text-[10px] text-slate-400 font-sans">(Chiến dịch)</span>
+          </button>
+        </div>
+      )}
+
+      {/* Visual WYSIWYG Mode */}
       {activeTab === 'editor' && (
         <>
-          {/* Variable Chips Bar */}
-          <div className="px-4 py-2 bg-blue-50/40 border-b border-slate-100 flex items-center space-x-2 overflow-x-auto text-xs">
-            <span className="text-slate-500 font-medium flex items-center space-x-1 shrink-0">
-              <Tag className="w-3 h-3 text-blue-500" />
-              <span>Chèn biến cá nhân hoá:</span>
-            </span>
-            <button
-              type="button"
-              onClick={() => insertVariable('name')}
-              className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-blue-50 text-blue-700 font-mono font-semibold rounded-lg border border-blue-200 shadow-2xs transition"
-              title="Chèn tên khách hàng"
-            >
-              <span>{"{{name}}"}</span>
-              <span className="text-[10px] text-slate-400 font-sans">(Tên)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertVariable('phone')}
-              className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-emerald-50 text-emerald-700 font-mono font-semibold rounded-lg border border-emerald-200 shadow-2xs transition"
-              title="Chèn số điện thoại khách hàng (dành cho Zalo OA)"
-            >
-              <Phone className="w-3 h-3 text-emerald-600" />
-              <span>{"{{phone}}"}</span>
-              <span className="text-[10px] text-emerald-500 font-sans font-medium">(Zalo SĐT)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertVariable('email')}
-              className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-amber-50 text-amber-700 font-mono font-semibold rounded-lg border border-amber-200 shadow-2xs transition"
-              title="Chèn email người nhận"
-            >
-              <span>{"{{email}}"}</span>
-              <span className="text-[10px] text-slate-400 font-sans">(Email)</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => insertVariable('campaign')}
-              className="inline-flex items-center space-x-1 px-2.5 py-1 bg-white hover:bg-slate-100 text-slate-700 font-mono font-semibold rounded-lg border border-slate-200 shadow-2xs transition"
-              title="Chèn tên chiến dịch"
-            >
-              <span>{"{{campaign}}"}</span>
-              <span className="text-[10px] text-slate-400 font-sans">(Chiến dịch)</span>
-            </button>
-          </div>
-
           {/* Formatting Controls Bar */}
           <div className="px-4 py-2 border-b border-slate-200 flex flex-wrap items-center gap-1 text-slate-600 bg-white">
             <button
@@ -486,6 +666,18 @@ export default function EmailRichEditor({
             >
               <Quote className="w-4 h-4" />
             </button>
+
+            <div className="ml-auto flex items-center space-x-2">
+              <button
+                type="button"
+                onClick={() => handleTabChange('html')}
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold transition"
+                title="Chuyển sang soạn thảo mã nguồn HTML"
+              >
+                <Code className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Xem mã HTML</span>
+              </button>
+            </div>
           </div>
 
           {/* Editable WYSIWYG Content Area */}
@@ -494,10 +686,100 @@ export default function EmailRichEditor({
             contentEditable
             onInput={(e) => onChangeHtml(e.currentTarget.innerHTML)}
             dangerouslySetInnerHTML={{ __html: contentHtml || '' }}
-            className="p-6 min-h-[360px] max-h-[550px] overflow-y-auto outline-hidden text-sm leading-relaxed prose max-w-none focus:bg-slate-50/20 transition"
+            className="p-6 min-h-[380px] max-h-[550px] overflow-y-auto outline-hidden text-sm leading-relaxed prose max-w-none focus:bg-slate-50/20 transition"
             placeholder="Bắt đầu soạn thảo nội dung email chuyên nghiệp của bạn ở đây..."
           />
         </>
+      )}
+
+      {/* HTML Source Code Mode */}
+      {activeTab === 'html' && (
+        <div className="flex flex-col bg-slate-950 text-slate-100">
+          {/* HTML Actions Bar */}
+          <div className="px-4 py-2 bg-slate-900 border-b border-slate-800 flex flex-wrap items-center justify-between gap-2 text-xs">
+            <div className="flex items-center space-x-2">
+              <span className="font-mono font-bold text-indigo-400 flex items-center space-x-1">
+                <Code className="w-4 h-4" />
+                <span>HTML Code Studio</span>
+              </span>
+              <span className="text-slate-500">•</span>
+              <span className="text-slate-400 text-[11px]">
+                {lineCount} dòng, {charCount} ký tự
+              </span>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              {/* Beautify / Format HTML */}
+              <button
+                type="button"
+                onClick={handleFormatHtml}
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-xs font-medium transition cursor-pointer"
+                title="Tự động căn lề và thụt đầu dòng HTML chuẩn"
+              >
+                <Wand2 className="w-3.5 h-3.5 text-amber-400" />
+                <span>Định dạng HTML</span>
+              </button>
+
+              {/* Insert HTML Boilerplate */}
+              <button
+                type="button"
+                onClick={handleInsertBoilerplate}
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-xs font-medium transition cursor-pointer"
+                title="Chèn khung email HTML responsive chuẩn 600px"
+              >
+                <FileCode className="w-3.5 h-3.5 text-blue-400" />
+                <span>Mẫu Khung HTML Chuẩn</span>
+              </button>
+
+              {/* Copy HTML */}
+              <button
+                type="button"
+                onClick={handleCopyHtml}
+                className="inline-flex items-center space-x-1 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg border border-slate-700 text-xs font-medium transition cursor-pointer"
+                title="Sao chép toàn bộ mã HTML vào clipboard"
+              >
+                {copiedHtml ? (
+                  <>
+                    <CheckCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span className="text-emerald-400">Đã chép!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-slate-300" />
+                    <span>Sao chép</span>
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {/* Raw Code Editor Textarea */}
+          <div className="relative">
+            <textarea
+              ref={htmlTextareaRef}
+              rows={18}
+              value={contentHtml || ''}
+              onChange={(e) => onChangeHtml(e.target.value)}
+              placeholder="<!-- Dán hoặc viết mã HTML email của bạn tại đây... -->&#10;<div style='font-family: Arial, sans-serif;'>&#10;  <h1>Xin chào {{name}}</h1>&#10;  <p>Nội dung email...</p>&#10;</div>"
+              className="w-full p-4 bg-slate-950 text-emerald-400 font-mono text-xs leading-relaxed border-0 focus:outline-none focus:ring-0 resize-y min-h-[380px] max-h-[600px]"
+              spellCheck={false}
+            />
+          </div>
+
+          {/* HTML Quick Tip Footer */}
+          <div className="px-4 py-2 bg-slate-900/90 border-t border-slate-800 text-[11px] text-slate-400 flex items-center justify-between">
+            <span>
+              💡 <b>Mẹo HTML:</b> Bạn có thể dán trực tiếp mã HTML tạo từ <b>Canva, Figma, Mailchimp, Stripo, BEE Free</b>. Sử dụng các biến <code>{"{{name}}"}</code>, <code>{"{{phone}}"}</code> để cá nhân hóa.
+            </span>
+            <button
+              type="button"
+              onClick={() => handleTabChange('editor')}
+              className="text-indigo-400 hover:text-indigo-300 font-semibold underline ml-2 shrink-0 cursor-pointer"
+            >
+              Chuyển về Trực quan →
+            </button>
+          </div>
+        </div>
       )}
 
       {/* Desktop Preview Mode */}
