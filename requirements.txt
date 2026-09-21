@@ -1,0 +1,15 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+sqlalchemy>=2.0.35
+pymysql>=1.1.1
+cryptography>=43.0.0
+playwright>=1.47.0
+browser-use>=0.1.30
+google-genai>=0.1.1
+openai>=1.50.0
+python-dotenv>=1.0.1
+requests>=2.32.3
+aiofiles>=24.1.0
+python-multipart>=0.0.12

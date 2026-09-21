@@ -1,0 +1,183 @@
+from datetime import datetime
+from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field
+
+class CampaignCreate(BaseModel):
+    name: str
+    subject: str
+    from_name: str = "Aesthetic Conference Hub"
+    from_email: str = "outreach@aesthetichub.vn"
+    reply_to: Optional[str] = None
+    daily_limit: int = 300
+    hourly_limit: int = 30
+    min_delay_seconds: int = 15
+    max_delay_seconds: int = 45
+    content_html: Optional[str] = None
+    content_plain: Optional[str] = None
+    preview_text: Optional[str] = None
+    cta_text: Optional[str] = None
+    cta_url: Optional[str] = None
+
+class CampaignUpdate(BaseModel):
+    name: Optional[str] = None
+    subject: Optional[str] = None
+    from_name: Optional[str] = None
+    from_email: Optional[str] = None
+    reply_to: Optional[str] = None
+    daily_limit: Optional[int] = None
+    hourly_limit: Optional[int] = None
+    min_delay_seconds: Optional[int] = None
+    max_delay_seconds: Optional[int] = None
+    content_html: Optional[str] = None
+    content_plain: Optional[str] = None
+    preview_text: Optional[str] = None
+    cta_text: Optional[str] = None
+    cta_url: Optional[str] = None
+
+class CampaignResponse(BaseModel):
+    id: int
+    name: str
+    subject: str
+    from_name: str
+    from_email: str
+    reply_to: Optional[str] = None
+    status: str
+    daily_limit: int
+    hourly_limit: int
+    min_delay_seconds: int
+    max_delay_seconds: int
+    total_recipients: int
+    queued_count: int
+    sent_count: int
+    failed_count: int
+    skipped_count: int
+    remaining_count: int
+    content_html: Optional[str] = None
+    content_plain: Optional[str] = None
+    preview_text: Optional[str] = None
+    cta_text: Optional[str] = None
+    cta_url: Optional[str] = None
+    started_at: Optional[datetime] = None
+    paused_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
+    last_processed_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+    estimated_days_remaining: Optional[float] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class RecipientCreate(BaseModel):
+    email: str
+    name: Optional[str] = None
+    contact_id: Optional[str] = None
+
+class BatchRecipientsImport(BaseModel):
+    recipients: List[RecipientCreate]
+
+class RecipientResponse(BaseModel):
+    id: int
+    campaign_id: int
+    contact_id: Optional[str] = None
+    email: str
+    name: Optional[str] = None
+    status: str
+    attempt_count: int
+    last_attempt_at: Optional[datetime] = None
+    sent_at: Optional[datetime] = None
+    next_retry_at: Optional[datetime] = None
+    provider_message_id: Optional[str] = None
+    error_code: Optional[str] = None
+    error_message: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class QueueItemResponse(BaseModel):
+    id: int
+    campaign_id: int
+    campaign_name: Optional[str] = None
+    recipient_id: int
+    recipient_email: Optional[str] = None
+    recipient_name: Optional[str] = None
+    status: str
+    attempts: int
+    available_at: datetime
+    locked_at: Optional[datetime] = None
+    locked_by: Optional[str] = None
+    last_error: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class SuppressionCreate(BaseModel):
+    email: str
+    reason: str = "UNSUBSCRIBED"
+    source: str = "Manual"
+
+class SuppressionResponse(BaseModel):
+    id: int
+    email: str
+    reason: str
+    source: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+class ProviderSettingUpdate(BaseModel):
+    provider_name: Optional[str] = None
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_username: Optional[str] = None
+    smtp_password: Optional[str] = None
+    use_ssl: Optional[bool] = None
+    use_tls: Optional[bool] = None
+    from_email: Optional[str] = None
+    from_name: Optional[str] = None
+    reply_to: Optional[str] = None
+    daily_limit: Optional[int] = None
+    safety_margin_pct: Optional[float] = None
+    hourly_limit: Optional[int] = None
+    min_delay_seconds: Optional[int] = None
+    max_delay_seconds: Optional[int] = None
+    sending_window_start: Optional[str] = None
+    sending_window_end: Optional[str] = None
+    max_emails_per_contact_7d: Optional[int] = None
+    max_emails_per_contact_30d: Optional[int] = None
+    circuit_breaker_failures: Optional[int] = None
+    circuit_breaker_rate: Optional[float] = None
+
+class ProviderSettingResponse(BaseModel):
+    id: int
+    provider_name: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: Optional[str] = None
+    use_ssl: bool
+    use_tls: bool
+    from_email: str
+    from_name: str
+    reply_to: Optional[str] = None
+    daily_limit: int
+    safety_margin_pct: float
+    hourly_limit: int
+    min_delay_seconds: int
+    max_delay_seconds: int
+    sending_window_start: str
+    sending_window_end: str
+    max_emails_per_contact_7d: int
+    max_emails_per_contact_30d: int
+    timezone: str
+    circuit_breaker_failures: int
+    circuit_breaker_rate: float
+    consecutive_failures: int
+    is_paused: bool
+    pause_reason: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+class EmailDashboardStats(BaseModel):
+    quota: Dict[str, Any]
+    metrics: Dict[str, Any]
+    provider_status: Dict[str, Any]
+    active_campaigns: List[CampaignResponse]

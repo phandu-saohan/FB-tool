@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: facebook_automation_hub
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8080
+      - BROWSER_HEADLESS=true
+      - FALLBACK_TO_SQLITE=true
+      - DATABASE_URL=sqlite:///./data/facebook_automation.db
+      # AI Keys (Configure in Dokploy Environment Variables UI)
+      - AI_PROVIDER=gemini
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+    volumes:
+      # Persistent storage for SQLite, uploaded media, logs, and Facebook browser session
+      - fb_data:/app/data
+      - fb_profiles:/app/profiles
+      - fb_logs:/app/logs
+
+volumes:
+  fb_data:
+  fb_profiles:
+  fb_logs:

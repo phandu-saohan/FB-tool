@@ -1,0 +1,310 @@
+// Prisma schema for Aesthetic Conference Hub - Comment Assistant Module
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model CommentMonitoringRule {
+  id               Int              @id @default(autoincrement())
+  name             String
+  keywords         String
+  excludedKeywords String?
+  topics           String?
+  locations        String?
+  targetGroups     String?
+  status           String           @default("ACTIVE")
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  discoveredPosts  DiscoveredPost[]
+
+  @@map("comment_monitoring_rules")
+}
+
+model DiscoveredPost {
+  id              Int                     @id @default(autoincrement())
+  ruleId          Int?
+  externalPostId  String
+  groupId         String?
+  groupName       String?
+  authorName      String?
+  postText        String
+  postUrl         String?
+  relevanceScore  Int                     @default(0)
+  relevanceReason String?
+  status          String                  @default("FOUND") // FOUND, RELEVANT, SKIPPED, COMMENTED
+  discoveredAt    DateTime                @default(now())
+  metadataJson    String?
+  rule            CommentMonitoringRule?  @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  suggestions     CommentSuggestion[]
+
+  @@map("discovered_posts")
+}
+
+model CommentCampaign {
+  id                Int                 @id @default(autoincrement())
+  name              String
+  conferenceName    String
+  registrationUrl   String?
+  monitoringTopics  String?
+  targetGroups      String?
+  commentGuidelines String?
+  startDate         DateTime?
+  endDate           DateTime?
+  dailyLimit        Int                 @default(20)
+  approvalMode      String              @default("APPROVAL") // MANUAL, APPROVAL, CONTROLLED_AUTOMATION
+  status            String              @default("ACTIVE") // ACTIVE, PAUSED, COMPLETED
+  createdAt         DateTime            @default(now())
+  suggestions       CommentSuggestion[]
+
+  @@map("comment_campaigns")
+}
+
+model CommentSuggestion {
+  id               Int                @id @default(autoincrement())
+  discoveredPostId Int
+  campaignId       Int?
+  conferenceName   String
+  registrationUrl  String?
+  relevanceScore   Int                @default(0)
+  reason           String?
+  tone             String             @default("Professional")
+  variantsJson     String
+  selectedComment  String
+  disclosureMode   String             @default("OPTIONAL") // OFF, OPTIONAL, REQUIRED
+  disclosureText   String             @default("Thông tin chương trình do BTC cung cấp.")
+  status           String             @default("PENDING") // PENDING, APPROVED, REJECTED, SCHEDULED, PUBLISHED, FAILED
+  tags             String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  post             DiscoveredPost     @relation(fields: [discoveredPostId], references: [id], onDelete: Cascade)
+  campaign         CommentCampaign?   @relation(fields: [campaignId], references: [id])
+  approvals        CommentApproval[]
+  schedules        ScheduledComment[]
+
+  @@map("comment_suggestions")
+}
+
+model ScheduledComment {
+  id           Int               @id @default(autoincrement())
+  suggestionId Int
+  campaignId   Int?
+  groupId      String?
+  commentText  String
+  scheduledAt  DateTime
+  timezone     String            @default("Asia/Ho_Chi_Minh")
+  status       String            @default("SCHEDULED") // SCHEDULED, PUBLISHED, CANCELLED, FAILED
+  errorMessage String?
+  executedAt   DateTime?
+  createdAt    DateTime          @default(now())
+  suggestion   CommentSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@map("scheduled_comments")
+}
+
+model CommentApproval {
+  id           Int               @id @default(autoincrement())
+  suggestionId Int
+  reviewerId   String            @default("admin")
+  action       String // APPROVED, REJECTED, EDITED
+  previousText String?
+  finalText    String
+  reason       String?
+  reviewedAt   DateTime          @default(now())
+  suggestion   CommentSuggestion @relation(fields: [suggestionId], references: [id], onDelete: Cascade)
+
+  @@map("comment_approvals")
+}
+
+model CommentRateLimit {
+  id                   Int       @id @default(autoincrement())
+  targetGroupId        String    @unique
+  lastCommentAt        DateTime?
+  groupCommentCount24h Int       @default(0)
+  groupCommentCount7d  Int       @default(0)
+  updatedAt            DateTime  @updatedAt
+
+  @@map("comment_rate_limits")
+}
+
+model CommentLog {
+  id                 Int       @id @default(autoincrement())
+  userId             String    @default("system")
+  campaignId         Int?
+  groupId            String?
+  sourcePostId       String?
+  conferenceId       String?
+  contentId          Int?
+  commentText        String
+  provider           String    @default("MockCommentPublishingProvider")
+  status             String // PUBLISHED, FAILED, CANCELLED
+  scheduledAt        DateTime?
+  publishedAt        DateTime?
+  externalCommentId  String?
+  externalCommentUrl String?
+  errorCode          String?
+  errorMessage       String?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  @@map("comment_logs")
+}
+
+// ---------------------------------------------------------------------------
+// EMAIL CAMPAIGN QUEUE & RELIABLE SENDING MODELS
+// ---------------------------------------------------------------------------
+
+model EmailCampaign {
+  id               Int                      @id @default(autoincrement())
+  organizationId   String?                  @map("organization_id")
+  conferenceId     String?                  @map("conference_id")
+  name             String
+  subject          String
+  fromName         String                   @default("Aesthetic Conference Hub") @map("from_name")
+  fromEmail        String                   @map("from_email")
+  replyTo          String?                  @map("reply_to")
+  status           String                   @default("DRAFT")
+  dailyLimit       Int                      @default(300) @map("daily_limit")
+  hourlyLimit      Int                      @default(30) @map("hourly_limit")
+  minDelaySeconds  Int                      @default(15) @map("min_delay_seconds")
+  maxDelaySeconds  Int                      @default(45) @map("max_delay_seconds")
+  totalRecipients  Int                      @default(0) @map("total_recipients")
+  queuedCount      Int                      @default(0) @map("queued_count")
+  sentCount        Int                      @default(0) @map("sent_count")
+  failedCount      Int                      @default(0) @map("failed_count")
+  skippedCount     Int                      @default(0) @map("skipped_count")
+  remainingCount   Int                      @default(0) @map("remaining_count")
+  contentHtml      String?                  @map("content_html")
+  contentPlain     String?                  @map("content_plain")
+  previewText      String?                  @map("preview_text")
+  ctaText          String?                  @map("cta_text")
+  ctaUrl           String?                  @map("cta_url")
+  startedAt        DateTime?                @map("started_at")
+  pausedAt         DateTime?                @map("paused_at")
+  completedAt      DateTime?                @map("completed_at")
+  lastProcessedAt  DateTime?                @map("last_processed_at")
+  nextRunAt        DateTime?                @map("next_run_at")
+  createdAt        DateTime                 @default(now()) @map("created_at")
+  updatedAt        DateTime                 @updatedAt @map("updated_at")
+
+  recipients       EmailCampaignRecipient[]
+  jobs             EmailJob[]
+
+  @@map("email_campaigns")
+}
+
+model EmailCampaignRecipient {
+  id                  Int            @id @default(autoincrement())
+  campaignId          Int            @map("campaign_id")
+  contactId           String?        @map("contact_id")
+  email               String
+  name                String?
+  status              String         @default("QUEUED")
+  attemptCount        Int            @default(0) @map("attempt_count")
+  lastAttemptAt       DateTime?      @map("last_attempt_at")
+  sentAt              DateTime?      @map("sent_at")
+  nextRetryAt         DateTime?      @map("next_retry_at")
+  providerMessageId   String?        @map("provider_message_id")
+  errorCode           String?        @map("error_code")
+  errorMessage        String?        @map("error_message")
+  idempotencyKey      String?        @map("idempotency_key")
+  createdAt           DateTime       @default(now()) @map("created_at")
+  updatedAt           DateTime       @updatedAt @map("updated_at")
+
+  campaign            EmailCampaign  @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  job                 EmailJob?
+
+  @@unique([campaignId, email], name: "uq_campaign_email")
+  @@map("email_campaign_recipients")
+}
+
+model EmailJob {
+  id           Int                    @id @default(autoincrement())
+  campaignId   Int                    @map("campaign_id")
+  recipientId  Int                    @unique @map("recipient_id")
+  status       String                 @default("PENDING")
+  attempts     Int                    @default(0)
+  availableAt  DateTime               @default(now()) @map("available_at")
+  lockedAt     DateTime?              @map("locked_at")
+  lockedBy     String?                @map("locked_by")
+  lastError    String?                @map("last_error")
+  createdAt    DateTime               @default(now()) @map("created_at")
+  updatedAt    DateTime               @updatedAt @map("updated_at")
+
+  campaign     EmailCampaign          @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipient    EmailCampaignRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+
+  @@map("email_jobs")
+}
+
+model EmailQuota {
+  id             Int      @id @default(autoincrement())
+  provider       String   @default("Hostinger")
+  date           String
+  dailyLimit     Int      @default(300) @map("daily_limit")
+  usedCount      Int      @default(0) @map("used_count")
+  remainingCount Int      @default(300) @map("remaining_count")
+  reservedCount  Int      @default(0) @map("reserved_count")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, date], name: "uq_provider_date")
+  @@map("email_quotas")
+}
+
+model EmailSuppression {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  reason    String
+  source    String   @default("System")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("email_suppressions")
+}
+
+model EmailProviderSetting {
+  id                       Int      @id @default(autoincrement())
+  providerName             String   @default("MockEmailProvider") @map("provider_name")
+  smtpHost                 String   @default("smtp.hostinger.com") @map("smtp_host")
+  smtpPort                 Int      @default(465) @map("smtp_port")
+  smtpUsername             String   @default("outreach@aesthetichub.vn") @map("smtp_username")
+  smtpPassword             String?  @map("smtp_password")
+  useSsl                   Boolean  @default(true) @map("use_ssl")
+  useTls                   Boolean  @default(false) @map("use_tls")
+  fromEmail                String   @default("outreach@aesthetichub.vn") @map("from_email")
+  fromName                 String   @default("Aesthetic Conference Intelligence") @map("from_name")
+  replyTo                  String?  @map("reply_to")
+  dailyLimit               Int      @default(300) @map("daily_limit")
+  safetyMarginPct          Float    @default(10.0) @map("safety_margin_pct")
+  hourlyLimit              Int      @default(30) @map("hourly_limit")
+  minDelaySeconds          Int      @default(15) @map("min_delay_seconds")
+  maxDelaySeconds          Int      @default(45) @map("max_delay_seconds")
+  sendingWindowStart       String   @default("08:00") @map("sending_window_start")
+  sendingWindowEnd         String   @default("18:00") @map("sending_window_end")
+  maxEmailsPerContact7d    Int      @default(1) @map("max_emails_per_contact_7d")
+  maxEmailsPerContact30d   Int      @default(3) @map("max_emails_per_contact_30d")
+  timezone                 String   @default("Asia/Ho_Chi_Minh")
+  circuitBreakerFailures   Int      @default(20) @map("circuit_breaker_failures")
+  circuitBreakerRate       Float    @default(0.30) @map("circuit_breaker_rate")
+  consecutiveFailures      Int      @default(0) @map("consecutive_failures")
+  isPaused                 Boolean  @default(false) @map("is_paused")
+  pauseReason              String?  @map("pause_reason")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@map("email_provider_settings")
+}
+
+model EmailAuditLog {
+  id           Int      @id @default(autoincrement())
+  actor        String   @default("System")
+  action       String
+  campaignId   Int?     @map("campaign_id")
+  recipientId  Int?     @map("recipient_id")
+  metadataJson String?  @map("metadata_json")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("email_audit_logs")
+}
