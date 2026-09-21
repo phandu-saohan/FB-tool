@@ -227,9 +227,37 @@ export default function ExcelUploadModal({ campaignId, campaignName, isOpen, onC
 
           {/* Error Alert */}
           {errorMsg && (
-            <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-xs text-rose-800 flex items-start space-x-2">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <span>{errorMsg}</span>
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-800 space-y-2.5 animate-in fade-in">
+              <div className="flex items-start space-x-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                <div className="flex-1 font-medium">{errorMsg}</div>
+              </div>
+              <div className="bg-white/80 rounded-lg p-2.5 border border-rose-100 text-[11px] text-slate-600 space-y-1.5">
+                <p className="font-semibold text-rose-900">💡 Hướng dẫn khắc phục nhanh:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>File cần có ít nhất 1 cột chứa email hợp lệ (ví dụ: <code className="text-rose-700 bg-rose-50 px-1 rounded">khachhang@gmail.com</code>).</li>
+                  <li>Nếu file có dòng tiêu đề banner ở đầu hoặc các cột nằm khác vị trí, hệ thống đã hỗ trợ tự động tìm kiếm.</li>
+                  <li>Nếu bạn đang dùng file Excel đuôi <code className="text-rose-700 bg-rose-50 px-1 rounded">.xls</code> cũ, hãy mở file và chọn <b>Save As</b> sang <code className="text-rose-700 bg-rose-50 px-1 rounded">.xlsx</code> hoặc <code className="text-rose-700 bg-rose-50 px-1 rounded">.csv</code>.</li>
+                </ul>
+                <div className="pt-1 flex items-center justify-between">
+                  <button
+                    type="button"
+                    onClick={handleDownloadTemplate}
+                    disabled={downloadingTemplate}
+                    className="inline-flex items-center space-x-1 px-2.5 py-1 bg-rose-100 hover:bg-rose-200 text-rose-800 font-semibold rounded-md transition"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>{downloadingTemplate ? 'Đang tải...' : 'Tải File Mẫu Chuẩn (.xlsx)'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setFile(null); setErrorMsg(null); }}
+                    className="text-slate-500 hover:text-slate-700 underline text-[11px]"
+                  >
+                    Chọn file khác
+                  </button>
+                </div>
+              </div>
             </div>
           )}
         </div>

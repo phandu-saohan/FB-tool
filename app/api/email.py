@@ -327,13 +327,32 @@ async def upload_campaign_excel(
         raise HTTPException(status_code=404, detail="Không tìm thấy chiến dịch email")
 
     filename = file.filename or "contacts.xlsx"
-    file_bytes = await file.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="File rỗng, vui lòng kiểm tra lại.")
+    try:
+        file_bytes = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Không thể đọc nội dung file tải lên: {str(e)}")
 
-    contacts, parse_errors = ExcelContactService.parse_contacts_file(file_bytes, filename)
-    if not contacts and parse_errors:
-        raise HTTPException(status_code=400, detail=f"Không thể đọc danh sách: {'; '.join(parse_errors[:3])}")
+    if not file_bytes or len(file_bytes) == 0:
+        raise HTTPException(status_code=400, detail="File rỗng hoặc không có dữ liệu, vui lòng chọn file khác.")
+
+    if len(file_bytes) > 25 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="Dung lượng file vượt quá giới hạn cho phép (tối đa 25MB).")
+
+    try:
+        contacts, parse_errors = ExcelContactService.parse_contacts_file(file_bytes, filename)
+    except Exception as e:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Lỗi khi xử lý file '{filename}': {str(e)}. Vui lòng kiểm tra định dạng file hoặc tải file mẫu chuẩn."
+        )
+
+    if not contacts:
+        detail_msg = parse_errors[0] if parse_errors else (
+            "Không tìm thấy địa chỉ email hợp lệ nào trong tệp. "
+            "Vui lòng đảm bảo bảng tính có ít nhất 1 cột chứa Email (ví dụ: 'user@example.com'). "
+            "Bạn có thể bấm 'Tải File Mẫu Excel' để xem mẫu chuẩn."
+        )
+        raise HTTPException(status_code=400, detail=detail_msg)
 
     added_count = 0
     skipped_duplicates = 0
@@ -351,10 +370,13 @@ async def upload_campaign_excel(
 
         if existing:
             # If exists but didn't have phone, update phone
+            phone_updated = False
             if phone and not existing.phone:
                 existing.phone = phone
-                if name and not existing.name:
-                    existing.name = name
+                phone_updated = True
+            if name and not existing.name:
+                existing.name = name
+            if phone_updated or (phone and existing.phone):
                 zalo_ready_count += 1
             skipped_duplicates += 1
             continue
@@ -387,8 +409,13 @@ async def upload_campaign_excel(
 
     EmailAuditLogger.log(
         db, action="IMPORT_EXCEL", campaign_id=campaign_id,
-        metadata={"filename": filename, "added": added_count, "zalo_ready": zalo_ready_count}
+        metadata={"filename": filename, "added": added_count, "zalo_ready": zalo_ready_count, "skipped": skipped_duplicates}
     )
+
+    if added_count == 0 and skipped_duplicates > 0:
+        res_message = f"Tất cả {skipped_duplicates} liên hệ trong file đã có sẵn trong chiến dịch này (đã tự động cập nhật số điện thoại nếu có)."
+    else:
+        res_message = f"Đã nạp thành công {added_count} liên hệ từ file. {zalo_ready_count} số điện thoại sẵn sàng cho Zalo OA ({skipped_duplicates} email trùng lặp)."
 
     return ExcelImportResult(
         success=True,
@@ -396,7 +423,7 @@ async def upload_campaign_excel(
         skipped_count=skipped_duplicates,
         invalid_count=len(parse_errors),
         zalo_ready_count=zalo_ready_count,
-        message=f"Đã nạp thành công {added_count} liên hệ từ Excel. {zalo_ready_count} số điện thoại sẵn sàng cho Zalo OA ({skipped_duplicates} email trùng lặp)."
+        message=res_message
     )
 
 @router.get("/campaigns/{campaign_id}/export-zalo-oa")
