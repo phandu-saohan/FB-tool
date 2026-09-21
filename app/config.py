@@ -25,7 +25,7 @@ class Settings(BaseSettings):
     
     # Server
     HOST: str = Field(default='127.0.0.1')
-    PORT: int = Field(default=8000)
+    PORT: int = Field(default=8080)
 
     class Config:
         env_file = '.env'

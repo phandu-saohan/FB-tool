@@ -18,7 +18,10 @@ if sys.platform == "win32":
         pass
 
 def find_available_port(host: str, preferred_port: int) -> int:
-    """Finds an open port, avoiding zombie socket collisions on Windows"""
+    """Finds an open port on Windows; in Docker/Linux container, preserves configured port directly"""
+    if sys.platform != "win32" or os.environ.get("DOCKER_CONTAINER"):
+        return preferred_port
+
     ports_to_try = [preferred_port, 8080, 8000, 8001, 8002, 8888]
     # Remove duplicates while preserving order
     seen = set()
@@ -59,10 +62,13 @@ if __name__ == "__main__":
         print(f" (Port {settings.PORT} dang ban, tu dong chuyen sang Port {active_port})")
     print("=" * 65)
     
+    loop_arg = "app.utils.loop:get_proactor_loop" if sys.platform == "win32" else "asyncio"
+
     uvicorn.run(
         "app.main:app",
         host=settings.HOST,
         port=active_port,
         reload=False,
-        loop="app.utils.loop:get_proactor_loop"
+        loop=loop_arg
     )
+

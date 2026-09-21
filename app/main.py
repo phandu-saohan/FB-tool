@@ -90,6 +90,14 @@ app.include_router(logs_router, prefix="/api")
 app.include_router(comments_router, prefix="/api")
 app.include_router(email_router)
 
+@app.get("/health")
+@app.get("/api/health")
+def health_check():
+    return {
+        "status": "healthy",
+        "service": "Facebook Automation Hub"
+    }
+
 # Serve frontend build if exists
 FRONTEND_DIST = os.path.abspath("frontend/dist")
 if os.path.exists(FRONTEND_DIST):

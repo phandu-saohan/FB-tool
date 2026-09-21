@@ -19,7 +19,12 @@ ENV PYTHONUNBUFFERED=1 \
     DEBIAN_FRONTEND=noninteractive \
     HOST=0.0.0.0 \
     PORT=8080 \
-    BROWSER_HEADLESS=true
+    BROWSER_HEADLESS=true \
+    DOCKER_CONTAINER=1
+
+# Install system utilities (curl, ca-certificates)
+RUN apt-get update && apt-get install -y --no-install-recommends curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy Python dependencies
 COPY requirements.txt .
@@ -42,9 +47,10 @@ RUN mkdir -p /app/data /app/profiles/facebook /app/logs
 # Expose Port for Dokploy / Traefik
 EXPOSE 8080
 
-# Healthcheck
-HEALTHCHECK --interval=30s --timeout=10s --start-period=15s --retries=3 \
-  CMD curl -f http://127.0.0.1:8080/ || exit 1
+# Healthcheck using built-in python urllib
+HEALTHCHECK --interval=20s --timeout=5s --start-period=10s --retries=3 \
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health')" || exit 1
 
 # Start Server
 CMD ["python", "run.py"]
+
