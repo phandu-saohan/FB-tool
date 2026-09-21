@@ -11,7 +11,10 @@ import {
   Upload, 
   CheckCircle2,
   Calendar,
-  X
+  X,
+  Globe,
+  Lock,
+  Search
 } from 'lucide-react';
 import { 
   getGroups, 
@@ -46,6 +49,8 @@ export default function CreatePostView({ setActiveTab }) {
   const [availablePages, setAvailablePages] = useState([]);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [groupPrivacyFilter, setGroupPrivacyFilter] = useState('ALL'); // 'ALL' | 'Public' | 'Private'
+  const [groupSearchTerm, setGroupSearchTerm] = useState('');
 
   useEffect(() => {
     loadTargets();
@@ -181,6 +186,43 @@ export default function CreatePostView({ setActiveTab }) {
     setTargetPageIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
+  const publicGroups = availableGroups.filter(g => (g.privacy || '').toLowerCase() === 'public');
+  const privateGroups = availableGroups.filter(g => (g.privacy || '').toLowerCase() === 'private');
+
+  const filteredGroups = availableGroups.filter(grp => {
+    const priv = (grp.privacy || 'Public').toLowerCase();
+    const matchesPrivacy = 
+      groupPrivacyFilter === 'ALL' 
+        ? true 
+        : groupPrivacyFilter === 'Public' 
+          ? priv === 'public' 
+          : priv === 'private';
+    const matchesSearch = !groupSearchTerm.trim() || grp.name?.toLowerCase().includes(groupSearchTerm.toLowerCase());
+    return matchesPrivacy && matchesSearch;
+  });
+
+  const selectOnlyPublic = () => {
+    const pubIds = publicGroups.map(g => g.id);
+    setTargetGroupIds(prev => Array.from(new Set([...prev, ...pubIds])));
+  };
+
+  const selectOnlyPrivate = () => {
+    const privIds = privateGroups.map(g => g.id);
+    setTargetGroupIds(prev => Array.from(new Set([...prev, ...privIds])));
+  };
+
+  const toggleSelectFiltered = () => {
+    const filteredIds = filteredGroups.map(g => g.id);
+    if (filteredIds.length === 0) return;
+    const allSelected = filteredIds.every(id => targetGroupIds.includes(id));
+    if (allSelected) {
+      const set = new Set(filteredIds);
+      setTargetGroupIds(prev => prev.filter(id => !set.has(id)));
+    } else {
+      setTargetGroupIds(prev => Array.from(new Set([...prev, ...filteredIds])));
+    }
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-6">
       {/* Header */}
@@ -292,45 +334,168 @@ export default function CreatePostView({ setActiveTab }) {
 
         {/* Right Column: Targets Selection */}
         <div className="lg:col-span-4 space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-md space-y-3.5">
+            {/* Header with Title and All/None toggle */}
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
               <div className="flex items-center space-x-2">
                 <Users className="w-4 h-4 text-blue-400" />
-                <h3 className="font-bold text-sm text-white">Chọn Groups mục tiêu ({targetGroupIds.length})</h3>
+                <h3 className="font-bold text-sm text-white">Chọn Groups mục tiêu</h3>
+                <span className="text-xs bg-blue-500/10 text-blue-400 font-semibold px-2 py-0.5 rounded-full border border-blue-500/20">
+                  {targetGroupIds.length}/{availableGroups.length}
+                </span>
               </div>
               <button 
+                type="button"
                 onClick={() => setTargetGroupIds(targetGroupIds.length === availableGroups.length ? [] : availableGroups.map(g => g.id))}
                 className="text-xs text-blue-400 hover:underline"
               >
-                {targetGroupIds.length === availableGroups.length ? 'Bỏ chọn' : 'Tất cả'}
+                {targetGroupIds.length === availableGroups.length ? 'Bỏ chọn tất cả' : 'Chọn tất cả'}
               </button>
             </div>
 
-            <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-              {availableGroups.length === 0 ? (
-                <p className="text-xs text-slate-500 py-3 text-center">Chưa có nhóm nào trong DB.</p>
+            {/* Privacy Filter Tabs */}
+            <div className="flex items-center space-x-1 bg-slate-950 p-1 rounded-xl border border-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setGroupPrivacyFilter('ALL')}
+                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium transition text-center ${
+                  groupPrivacyFilter === 'ALL'
+                    ? 'bg-slate-800 text-white shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                Tất cả ({availableGroups.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupPrivacyFilter('Public')}
+                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center space-x-1 transition ${
+                  groupPrivacyFilter === 'Public'
+                    ? 'bg-emerald-600/30 text-emerald-300 border border-emerald-500/40 shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-emerald-400'
+                }`}
+              >
+                <Globe className="w-3 h-3 text-emerald-400" />
+                <span>Công khai ({publicGroups.length})</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setGroupPrivacyFilter('Private')}
+                className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-medium inline-flex items-center justify-center space-x-1 transition ${
+                  groupPrivacyFilter === 'Private'
+                    ? 'bg-amber-600/30 text-amber-300 border border-amber-500/40 shadow-sm font-semibold'
+                    : 'text-slate-400 hover:text-amber-400'
+                }`}
+              >
+                <Lock className="w-3 h-3 text-amber-400" />
+                <span>Riêng tư ({privateGroups.length})</span>
+              </button>
+            </div>
+
+            {/* Quick Action Buttons for Privacy Selection */}
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-[11px] text-slate-500 font-medium">Chọn nhanh:</span>
+              <button
+                type="button"
+                onClick={selectOnlyPublic}
+                className="text-[11px] px-2 py-0.5 rounded bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 border border-emerald-500/20 transition"
+                title="Chọn thêm tất cả nhóm công khai"
+              >
+                + Công khai ({publicGroups.length})
+              </button>
+              <button
+                type="button"
+                onClick={selectOnlyPrivate}
+                className="text-[11px] px-2 py-0.5 rounded bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 transition"
+                title="Chọn thêm tất cả nhóm riêng tư"
+              >
+                + Riêng tư ({privateGroups.length})
+              </button>
+              {groupPrivacyFilter !== 'ALL' && filteredGroups.length > 0 && (
+                <button
+                  type="button"
+                  onClick={toggleSelectFiltered}
+                  className="text-[11px] px-2 py-0.5 rounded bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 transition ml-auto"
+                >
+                  {filteredGroups.every(g => targetGroupIds.includes(g.id)) ? 'Bỏ chọn tab này' : 'Chọn hết tab này'}
+                </button>
+              )}
+            </div>
+
+            {/* Search Input within groups */}
+            <div className="relative">
+              <Search className="w-3.5 h-3.5 text-slate-500 absolute left-2.5 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                value={groupSearchTerm}
+                onChange={(e) => setGroupSearchTerm(e.target.value)}
+                placeholder="Lọc nhanh tên nhóm..."
+                className="w-full bg-slate-950 border border-slate-800 rounded-lg pl-8 pr-7 py-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-blue-500"
+              />
+              {groupSearchTerm && (
+                <button 
+                  type="button"
+                  onClick={() => setGroupSearchTerm('')} 
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+
+            {/* Groups List */}
+            <div className="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
+              {filteredGroups.length === 0 ? (
+                <p className="text-xs text-slate-500 py-4 text-center">
+                  {availableGroups.length === 0 
+                    ? 'Chưa có nhóm nào trong DB.' 
+                    : 'Không tìm thấy nhóm phù hợp bộ lọc.'}
+                </p>
               ) : (
-                availableGroups.map(grp => (
-                  <label 
-                    key={grp.id} 
-                    className={`flex items-start space-x-2 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
-                      targetGroupIds.includes(grp.id) 
-                        ? 'bg-blue-600/10 border-blue-500/40 text-white' 
-                        : 'bg-slate-950 border-slate-800 text-slate-400 hover:text-slate-200'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={targetGroupIds.includes(grp.id)}
-                      onChange={() => toggleTargetGroup(grp.id)}
-                      className="rounded bg-slate-800 border-slate-700 text-blue-600 mt-0.5"
-                    />
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold truncate">{grp.name}</div>
-                      <div className="text-[11px] text-slate-400">{grp.members || 'N/A'} • {grp.privacy}</div>
-                    </div>
-                  </label>
-                ))
+                filteredGroups.map(grp => {
+                  const isPublic = (grp.privacy || 'Public').toLowerCase() === 'public';
+                  const isSelected = targetGroupIds.includes(grp.id);
+                  return (
+                    <label 
+                      key={grp.id} 
+                      className={`flex items-start space-x-2.5 p-2.5 rounded-lg border text-xs cursor-pointer transition ${
+                        isSelected 
+                          ? 'bg-blue-600/10 border-blue-500/40 text-white' 
+                          : 'bg-slate-950 border-slate-800/80 text-slate-400 hover:text-slate-200 hover:border-slate-700'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleTargetGroup(grp.id)}
+                        className="rounded bg-slate-800 border-slate-700 text-blue-600 mt-0.5"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold truncate text-slate-200">{grp.name}</div>
+                        <div className="flex items-center space-x-2 mt-1">
+                          <span className="text-[11px] text-slate-400">{grp.members || 'N/A'}</span>
+                          <span className="text-slate-600">•</span>
+                          {isPublic ? (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                              <Globe className="w-2.5 h-2.5 mr-1" />
+                              <span>Công khai</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-medium bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                              <Lock className="w-2.5 h-2.5 mr-1" />
+                              <span>Riêng tư</span>
+                            </span>
+                          )}
+                          {grp.status === 'JOINED' && (
+                            <span className="text-[10px] text-blue-400 font-semibold bg-blue-500/10 px-1 py-0.2 rounded border border-blue-500/20">
+                              Đã tham gia
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })
               )}
             </div>
           </div>
