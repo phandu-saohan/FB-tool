@@ -47,6 +47,7 @@ import {
   resetEmailCircuitBreaker,
   getEmailAuditLogs
 } from '../api';
+import Pagination, { usePagination } from '../components/Pagination';
 
 export default function EmailView() {
   const [activeSubTab, setActiveSubTab] = useState('dashboard');
@@ -59,12 +60,19 @@ export default function EmailView() {
   const [auditLogs, setAuditLogs] = useState([]);
   const [feedbackMsg, setFeedbackMsg] = useState(null);
 
+  // Pagination Hooks
+  const paginatedCampaigns = usePagination(campaigns, 8);
+  const paginatedQueue = usePagination(queue, 12);
+  const paginatedSuppressions = usePagination(suppressions, 10);
+  const paginatedAuditLogs = usePagination(auditLogs, 15);
+
   // Modals
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [selectedCampaignId, setSelectedCampaignId] = useState(null);
   const [showRecipientsModal, setShowRecipientsModal] = useState(false);
   const [recipientsList, setRecipientsList] = useState([]);
+  const paginatedRecipients = usePagination(recipientsList, 15);
 
   // Form states
   const [newCampaign, setNewCampaign] = useState({
@@ -660,85 +668,103 @@ export default function EmailView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {campaigns.map((c) => (
-                  <tr key={c.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono font-bold">#{c.id}</td>
-                    <td className="p-3">
-                      <div className="font-bold text-slate-800">{c.name}</div>
-                      <div className="text-[11px] text-slate-400 truncate max-w-xs">{c.subject}</div>
-                    </td>
-                    <td className="p-3">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        c.status === 'RUNNING' ? 'bg-green-100 text-green-700' :
-                        c.status === 'PAUSED' ? 'bg-amber-100 text-amber-700' :
-                        c.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        {c.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="font-semibold text-slate-700">{c.sent_count} / {c.total_recipients}</div>
-                      <div className="w-24 bg-slate-200 rounded-full h-1.5 mt-1">
-                        <div
-                          className="bg-blue-600 h-1.5 rounded-full"
-                          style={{ width: `${c.total_recipients > 0 ? (c.sent_count / c.total_recipients) * 100 : 0}%` }}
-                        ></div>
-                      </div>
-                    </td>
-                    <td className="p-3 font-bold text-slate-700">{c.remaining_count}</td>
-                    <td className="p-3 text-slate-500">
-                      {c.estimated_days_remaining ? `~${c.estimated_days_remaining} ngày` : '-'}
-                    </td>
-                    <td className="p-3 text-right space-x-1">
-                      {c.status === 'RUNNING' ? (
-                        <button
-                          onClick={() => handlePauseCampaign(c.id)}
-                          className="p-1.5 text-amber-600 hover:bg-amber-50 rounded"
-                          title="Tạm dừng"
-                        >
-                          <Pause className="w-4 h-4" />
-                        </button>
-                      ) : (
-                        <button
-                          onClick={() => handleStartCampaign(c.id)}
-                          className="p-1.5 text-green-600 hover:bg-green-50 rounded"
-                          title="Bắt đầu"
-                        >
-                          <Play className="w-4 h-4" />
-                        </button>
-                      )}
-                      <button
-                        onClick={() => {
-                          setSelectedCampaignId(c.id);
-                          setShowImportModal(true);
-                        }}
-                        className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
-                        title="Nạp người nhận"
-                      >
-                        <UserPlus className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleViewRecipients(c.id)}
-                        className="p-1.5 text-slate-600 hover:bg-slate-100 rounded"
-                        title="Xem danh sách người nhận"
-                      >
-                        <Users className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteCampaign(c.id)}
-                        className="p-1.5 text-red-600 hover:bg-red-50 rounded"
-                        title="Xóa chiến dịch"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                {paginatedCampaigns.totalItems === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="text-center py-8 text-slate-400">
+                      Chưa có chiến dịch nào. Hãy tạo chiến dịch mới.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  paginatedCampaigns.paginatedItems.map((c) => (
+                    <tr key={c.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-mono font-bold">#{c.id}</td>
+                      <td className="p-3">
+                        <div className="font-bold text-slate-800">{c.name}</div>
+                        <div className="text-[11px] text-slate-400 truncate max-w-xs">{c.subject}</div>
+                      </td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          c.status === 'RUNNING' ? 'bg-green-100 text-green-700' :
+                          c.status === 'PAUSED' ? 'bg-amber-100 text-amber-700' :
+                          c.status === 'COMPLETED' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {c.status}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <div className="font-semibold text-slate-700">{c.sent_count} / {c.total_recipients}</div>
+                        <div className="w-24 bg-slate-200 rounded-full h-1.5 mt-1">
+                          <div
+                            className="bg-blue-600 h-1.5 rounded-full"
+                            style={{ width: `${c.total_recipients > 0 ? (c.sent_count / c.total_recipients) * 100 : 0}%` }}
+                          ></div>
+                        </div>
+                      </td>
+                      <td className="p-3 font-bold text-slate-700">{c.remaining_count}</td>
+                      <td className="p-3 text-slate-500">
+                        {c.estimated_days_remaining ? `~${c.estimated_days_remaining} ngày` : '-'}
+                      </td>
+                      <td className="p-3 text-right space-x-1">
+                        {c.status === 'RUNNING' ? (
+                          <button
+                            onClick={() => handlePauseCampaign(c.id)}
+                            className="p-1.5 text-amber-600 hover:bg-amber-50 rounded"
+                            title="Tạm dừng"
+                          >
+                            <Pause className="w-4 h-4" />
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartCampaign(c.id)}
+                            className="p-1.5 text-green-600 hover:bg-green-50 rounded"
+                            title="Bắt đầu"
+                          >
+                            <Play className="w-4 h-4" />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => {
+                            setSelectedCampaignId(c.id);
+                            setShowImportModal(true);
+                          }}
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded"
+                          title="Nạp người nhận"
+                        >
+                          <UserPlus className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleViewRecipients(c.id)}
+                          className="p-1.5 text-slate-600 hover:bg-slate-100 rounded"
+                          title="Xem danh sách người nhận"
+                        >
+                          <Users className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteCampaign(c.id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded"
+                          title="Xóa chiến dịch"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            totalItems={paginatedCampaigns.totalItems}
+            currentPage={paginatedCampaigns.currentPage}
+            pageSize={paginatedCampaigns.pageSize}
+            onPageChange={paginatedCampaigns.setCurrentPage}
+            onPageSizeChange={paginatedCampaigns.setPageSize}
+            darkMode={false}
+          />
         </div>
       )}
+
 
       {/* TAB 3: QUEUE */}
       {activeSubTab === 'queue' && (
@@ -778,14 +804,14 @@ export default function EmailView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {queue.length === 0 ? (
+                {paginatedQueue.totalItems === 0 ? (
                   <tr>
                     <td colSpan="7" className="text-center py-8 text-slate-400">
                       Không có job nào trong hàng đợi.
                     </td>
                   </tr>
                 ) : (
-                  queue.map((j) => (
+                  paginatedQueue.paginatedItems.map((j) => (
                     <tr key={j.id} className="hover:bg-slate-50">
                       <td className="p-3 font-mono font-bold">#{j.id}</td>
                       <td className="p-3 font-medium text-slate-700">{j.campaign_name || `#${j.campaign_id}`}</td>
@@ -812,8 +838,18 @@ export default function EmailView() {
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            totalItems={paginatedQueue.totalItems}
+            currentPage={paginatedQueue.currentPage}
+            pageSize={paginatedQueue.pageSize}
+            onPageChange={paginatedQueue.setCurrentPage}
+            onPageSizeChange={paginatedQueue.setPageSize}
+            darkMode={false}
+          />
         </div>
       )}
+
 
       {/* TAB 4: SUPPRESSION */}
       {activeSubTab === 'suppression' && (
@@ -861,9 +897,9 @@ export default function EmailView() {
             <div className="flex justify-between items-center">
               <h3 className="font-bold text-slate-800 text-base">Danh sách Email Bị Chặn ({suppressions.length})</h3>
             </div>
-            <div className="overflow-x-auto max-h-96">
+            <div className="overflow-x-auto">
               <table className="w-full text-left text-xs text-slate-600">
-                <thead className="bg-slate-50 text-slate-500 uppercase font-semibold sticky top-0 border-b border-slate-200">
+                <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
                   <tr>
                     <th className="p-3">Email</th>
                     <th className="p-3">Lý do</th>
@@ -873,14 +909,14 @@ export default function EmailView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {suppressions.length === 0 ? (
+                  {paginatedSuppressions.totalItems === 0 ? (
                     <tr>
                       <td colSpan="5" className="text-center py-6 text-slate-400">
                         Danh sách chặn trống.
                       </td>
                     </tr>
                   ) : (
-                    suppressions.map((s) => (
+                    paginatedSuppressions.paginatedItems.map((s) => (
                       <tr key={s.id} className="hover:bg-slate-50">
                         <td className="p-3 font-semibold text-slate-800">{s.email}</td>
                         <td className="p-3">
@@ -904,9 +940,19 @@ export default function EmailView() {
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              totalItems={paginatedSuppressions.totalItems}
+              currentPage={paginatedSuppressions.currentPage}
+              pageSize={paginatedSuppressions.pageSize}
+              onPageChange={paginatedSuppressions.setCurrentPage}
+              onPageSizeChange={paginatedSuppressions.setPageSize}
+              darkMode={false}
+            />
           </div>
         </div>
       )}
+
 
       {/* TAB 5: SETTINGS & SAFETY */}
       {activeSubTab === 'settings' && settings && (
@@ -1128,9 +1174,9 @@ export default function EmailView() {
             <span className="text-xs text-slate-500">Ghi nhận toàn bộ thao tác Start, Pause, Lỗi, và Trip Circuit Breaker</span>
           </div>
 
-          <div className="overflow-x-auto max-h-[500px]">
+          <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-600">
-              <thead className="bg-slate-50 text-slate-500 uppercase font-semibold sticky top-0 border-b border-slate-200">
+              <thead className="bg-slate-50 text-slate-500 uppercase font-semibold border-b border-slate-200">
                 <tr>
                   <th className="p-3">Thời gian</th>
                   <th className="p-3">Tác tử (Actor)</th>
@@ -1140,26 +1186,44 @@ export default function EmailView() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {auditLogs.map((log) => (
-                  <tr key={log.id} className="hover:bg-slate-50">
-                    <td className="p-3 font-mono text-[11px] text-slate-400">
-                      {log.created_at ? new Date(log.created_at).toLocaleString('vi-VN') : '-'}
+                {paginatedAuditLogs.totalItems === 0 ? (
+                  <tr>
+                    <td colSpan="5" className="p-6 text-center text-xs text-slate-400">
+                      Chưa có nhật ký hoạt động.
                     </td>
-                    <td className="p-3 font-semibold text-slate-700">{log.actor}</td>
-                    <td className="p-3">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800">
-                        {log.action}
-                      </span>
-                    </td>
-                    <td className="p-3 font-mono">{log.campaign_id || '-'}</td>
-                    <td className="p-3 font-mono text-[11px] text-slate-500 truncate max-w-sm">{log.metadata || '-'}</td>
                   </tr>
-                ))}
+                ) : (
+                  paginatedAuditLogs.paginatedItems.map((log) => (
+                    <tr key={log.id} className="hover:bg-slate-50">
+                      <td className="p-3 font-mono text-[11px] text-slate-400">
+                        {log.created_at ? new Date(log.created_at).toLocaleString('vi-VN') : '-'}
+                      </td>
+                      <td className="p-3 font-semibold text-slate-700">{log.actor}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-800">
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="p-3 font-mono">{log.campaign_id || '-'}</td>
+                      <td className="p-3 font-mono text-[11px] text-slate-500 truncate max-w-sm">{log.metadata || '-'}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            totalItems={paginatedAuditLogs.totalItems}
+            currentPage={paginatedAuditLogs.currentPage}
+            pageSize={paginatedAuditLogs.pageSize}
+            onPageChange={paginatedAuditLogs.setCurrentPage}
+            onPageSizeChange={paginatedAuditLogs.setPageSize}
+            darkMode={false}
+          />
         </div>
       )}
+
 
       {/* MODAL: CREATE CAMPAIGN */}
       {showCreateModal && (
@@ -1348,30 +1412,47 @@ export default function EmailView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {recipientsList.map((r) => (
-                    <tr key={r.id}>
-                      <td className="p-2.5 font-semibold text-slate-800">{r.email}</td>
-                      <td className="p-2.5 text-slate-600">{r.name || '-'}</td>
-                      <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          r.status === 'SENT' ? 'bg-green-100 text-green-700' :
-                          r.status === 'BOUNCED' ? 'bg-red-100 text-red-700' :
-                          r.status === 'SKIPPED' ? 'bg-amber-100 text-amber-700' :
-                          r.status === 'RETRY' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
-                        }`}>
-                          {r.status}
-                        </span>
+                  {paginatedRecipients.totalItems === 0 ? (
+                    <tr>
+                      <td colSpan="6" className="text-center py-6 text-slate-400">
+                        Chưa có người nhận nào trong chiến dịch này.
                       </td>
-                      <td className="p-2.5 font-semibold">{r.attempt_count}</td>
-                      <td className="p-2.5 text-slate-400 text-[11px]">
-                        {r.sent_at ? new Date(r.sent_at).toLocaleString('vi-VN') : '-'}
-                      </td>
-                      <td className="p-2.5 text-slate-500 text-[10px] truncate max-w-xs">{r.error_message || r.provider_message_id || '-'}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    paginatedRecipients.paginatedItems.map((r) => (
+                      <tr key={r.id}>
+                        <td className="p-2.5 font-semibold text-slate-800">{r.email}</td>
+                        <td className="p-2.5 text-slate-600">{r.name || '-'}</td>
+                        <td className="p-2.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            r.status === 'SENT' ? 'bg-green-100 text-green-700' :
+                            r.status === 'BOUNCED' ? 'bg-red-100 text-red-700' :
+                            r.status === 'SKIPPED' ? 'bg-amber-100 text-amber-700' :
+                            r.status === 'RETRY' ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700'
+                          }`}>
+                            {r.status}
+                          </span>
+                        </td>
+                        <td className="p-2.5 font-semibold">{r.attempt_count}</td>
+                        <td className="p-2.5 text-slate-400 text-[11px]">
+                          {r.sent_at ? new Date(r.sent_at).toLocaleString('vi-VN') : '-'}
+                        </td>
+                        <td className="p-2.5 text-slate-500 text-[10px] truncate max-w-xs">{r.error_message || r.provider_message_id || '-'}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
+
+            <Pagination
+              totalItems={paginatedRecipients.totalItems}
+              currentPage={paginatedRecipients.currentPage}
+              pageSize={paginatedRecipients.pageSize}
+              onPageChange={paginatedRecipients.setCurrentPage}
+              onPageSizeChange={paginatedRecipients.setPageSize}
+              darkMode={false}
+            />
 
             <div className="flex justify-end pt-3 border-t">
               <button
@@ -1381,6 +1462,7 @@ export default function EmailView() {
                 Đóng
               </button>
             </div>
+
           </div>
         </div>
       )}

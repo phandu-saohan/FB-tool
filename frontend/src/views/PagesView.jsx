@@ -10,11 +10,21 @@ import {
   PenSquare
 } from 'lucide-react';
 import { getPages, updatePage, deletePage, selectAllPages } from '../api';
+import Pagination, { usePagination } from '../components/Pagination';
 
 export default function PagesView({ setActiveTab }) {
   const [pages, setPages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [keywordFilter, setKeywordFilter] = useState('');
+
+  const {
+    currentPage,
+    pageSize,
+    totalItems,
+    paginatedItems,
+    setCurrentPage,
+    setPageSize
+  } = usePagination(pages, 15);
 
   useEffect(() => {
     loadPages();
@@ -148,7 +158,7 @@ export default function PagesView({ setActiveTab }) {
                   </td>
                 </tr>
               ) : (
-                pages.map((pg) => (
+                paginatedItems.map((pg) => (
                   <tr key={pg.id} className="hover:bg-slate-800/40 transition">
                     <td className="p-4 text-center">
                       <input
@@ -193,7 +203,18 @@ export default function PagesView({ setActiveTab }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        <Pagination
+          totalItems={totalItems}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          darkMode={true}
+        />
       </div>
     </div>
   );
 }
+

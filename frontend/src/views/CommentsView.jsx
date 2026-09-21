@@ -48,6 +48,7 @@ import {
   getCommentSettings,
   updateCommentSettings
 } from '../api';
+import Pagination, { usePagination } from '../components/Pagination';
 
 export default function CommentsView() {
   const [activeTab, setActiveTab] = useState('approval'); // approval, discovery, schedule, campaigns, analytics, settings
@@ -114,6 +115,13 @@ export default function CommentsView() {
   // Settings & Logs State
   const [settings, setSettings] = useState(null);
   const [logs, setLogs] = useState([]);
+
+  // Pagination Hooks
+  const paginatedSuggestions = usePagination(suggestions, 8);
+  const paginatedDiscovered = usePagination(discoveredPosts, 8);
+  const paginatedSchedules = usePagination(schedules, 10);
+  const paginatedCampaigns = usePagination(campaigns, 8);
+  const paginatedLogs = usePagination(logs, 15);
 
   // Load dashboard stats
   const loadStats = async () => {
@@ -561,7 +569,7 @@ export default function CommentsView() {
             </div>
           ) : (
             <div className="space-y-4">
-              {suggestions.map((item) => {
+              {paginatedSuggestions.paginatedItems.map((item) => {
                 const isSelected = selectedIds.includes(item.id);
                 const scoreColor = item.relevance_score >= 80 
                   ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30'
@@ -603,100 +611,75 @@ export default function CommentsView() {
                       </div>
 
                       <div className="flex items-center space-x-2">
-                        {/* Relevance Score Badge */}
-                        <div className={`flex items-center space-x-1.5 px-3 py-1 rounded-full border text-xs font-bold ${scoreColor}`}>
-                          <Sparkles className="w-3.5 h-3.5" />
-                          <span>Độ phù hợp: {item.relevance_score}/100</span>
-                        </div>
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold border ${scoreColor}`}>
+                          Điểm phù hợp: {item.relevance_score}/100
+                        </span>
 
-                        {/* Status Badge */}
-                        <span className="text-[11px] px-2.5 py-1 rounded-full bg-slate-800 text-slate-300 font-semibold border border-slate-700">
+                        <span className={`text-xs px-2.5 py-1 rounded-full font-bold uppercase ${
+                          item.status === 'APPROVED' ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' :
+                          item.status === 'REJECTED' ? 'bg-rose-500/20 text-rose-400 border border-rose-500/30' :
+                          item.status === 'SCHEDULED' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
+                          item.status === 'PUBLISHED' ? 'bg-teal-500/20 text-teal-400 border border-teal-500/30' :
+                          'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                        }`}>
                           {item.status}
                         </span>
                       </div>
                     </div>
 
+                    {/* Content Body */}
                     <div className="p-5 space-y-4">
-                      {/* Source Post Section */}
-                      <div className="bg-slate-950 p-4 rounded-xl border border-slate-800/60 space-y-2">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
-                          <span>BÀI VIẾT NGUỒN (SOURCE POST)</span>
-                          {item.post?.post_url && (
-                            <a
-                              href={item.post.post_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-blue-400 hover:text-blue-300 flex items-center space-x-1 text-[11px] normal-case"
-                            >
-                              <span>Xem bài gốc</span>
-                              <ExternalLink className="w-3 h-3" />
-                            </a>
-                          )}
-                        </div>
-                        <p className="text-xs text-slate-200 leading-relaxed italic">
-                          "{item.post?.post_text}"
-                        </p>
+                      {/* Original Post Excerpt */}
+                      <div className="bg-slate-950/40 p-3.5 rounded-xl border border-slate-800/60 text-xs text-slate-300">
+                        <span className="text-slate-500 font-semibold uppercase text-[10px] block mb-1">Nội dung bài viết thảo luận:</span>
+                        <p className="line-clamp-3 leading-relaxed italic">"{item.post?.post_text}"</p>
                       </div>
 
-                      {/* AI Rationale */}
-                      <div className="bg-purple-950/20 border border-purple-900/30 p-3 rounded-xl text-xs space-y-1">
-                        <div className="text-[11px] font-semibold text-purple-400 flex items-center space-x-1.5">
-                          <Info className="w-3.5 h-3.5" />
-                          <span>LÝ DO AI ĐỀ XUẤT</span>
+                      {/* Reason & Angle */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+                          <span className="text-slate-400 font-semibold block mb-0.5">Lý do phù hợp:</span>
+                          <p className="text-slate-200">{item.relevance_reason}</p>
                         </div>
-                        <p className="text-slate-300 text-xs leading-relaxed">{item.reason}</p>
+                        <div className="bg-slate-800/40 p-3 rounded-xl border border-slate-700/50">
+                          <span className="text-slate-400 font-semibold block mb-0.5">Góc độ tiếp cận (Angle):</span>
+                          <p className="text-purple-300 font-medium capitalize">{item.angle}</p>
+                        </div>
                       </div>
 
-                      {/* Comment Variations Selector */}
-                      <div className="space-y-2">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">
-                          ĐỀ XUẤT BÌNH LUẬN (CHỌN BIẾN THỂ PHÙ HỢP)
-                        </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                          {item.variants.map((v, vIdx) => {
-                            const isChosen = item.selected_comment === v.text;
+                      {/* AI Generated Suggestion Options */}
+                      <div>
+                        <span className="text-xs font-semibold text-slate-300 block mb-2">Đề xuất bình luận (Chọn phương án tốt nhất):</span>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {['casual', 'expert', 'curious'].map((optKey) => {
+                            const optText = item[`suggestion_${optKey}`];
+                            if (!optText) return null;
+                            const isChosen = item.selected_comment === optText;
+
                             return (
                               <div
-                                key={vIdx}
+                                key={optKey}
                                 onClick={() => {
-                                  item.selected_comment = v.text;
-                                  setSuggestions([...suggestions]);
+                                  setSuggestions(suggestions.map(s => s.id === item.id ? { ...s, selected_comment: optText } : s));
                                 }}
-                                className={`p-3 rounded-xl border cursor-pointer transition-all text-xs space-y-1.5 ${
-                                  isChosen
-                                    ? 'bg-purple-950/30 border-purple-500 text-slate-100 shadow-md ring-1 ring-purple-500/50'
-                                    : 'bg-slate-950/60 border-slate-800 text-slate-300 hover:border-slate-700'
+                                className={`p-3 rounded-xl border text-xs cursor-pointer transition-all ${
+                                  isChosen 
+                                    ? 'bg-purple-950/40 border-purple-500/80 text-purple-200 ring-1 ring-purple-500/50' 
+                                    : 'bg-slate-950/40 border-slate-800 text-slate-400 hover:border-slate-700'
                                 }`}
                               >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-semibold text-purple-400 text-[11px]">
-                                    Biến thể {String.fromCharCode(65 + vIdx)} ({v.tone})
-                                  </span>
-                                  {isChosen && <Check className="w-3.5 h-3.5 text-purple-400 font-bold" />}
+                                <div className="flex items-center justify-between font-bold uppercase text-[10px] mb-1 text-slate-400">
+                                  <span>{optKey === 'casual' ? 'Thân thiện' : optKey === 'expert' ? 'Chuyên gia' : 'Hỏi đáp'}</span>
+                                  {isChosen && <Check className="w-3.5 h-3.5 text-purple-400" />}
                                 </div>
-                                <p className="line-clamp-4 leading-relaxed">{v.text}</p>
+                                <p className="line-clamp-4 leading-relaxed">{optText}</p>
                               </div>
                             );
                           })}
                         </div>
                       </div>
 
-                      {/* Active Selected Comment Box */}
-                      <div className="bg-slate-800/40 p-3.5 rounded-xl border border-slate-700/60 space-y-2">
-                        <div className="text-[11px] font-bold text-slate-400 uppercase flex items-center justify-between">
-                          <span>NỘI DUNG SẼ ĐĂNG</span>
-                          {item.disclosure_mode !== 'OFF' && (
-                            <span className="text-[11px] text-amber-400 font-medium">
-                              [Minh bạch: {item.disclosure_text}]
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-xs text-white leading-relaxed whitespace-pre-wrap font-sans">
-                          {item.selected_comment}
-                        </p>
-                      </div>
-
-                      {/* Action Buttons */}
+                      {/* Action Toolbar */}
                       <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-slate-800/60">
                         <button
                           onClick={() => setEditingItem({ ...item })}
@@ -734,8 +717,20 @@ export default function CommentsView() {
                   </div>
                 );
               })}
+
+              <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+                <Pagination
+                  totalItems={paginatedSuggestions.totalItems}
+                  currentPage={paginatedSuggestions.currentPage}
+                  pageSize={paginatedSuggestions.pageSize}
+                  onPageChange={paginatedSuggestions.setCurrentPage}
+                  onPageSizeChange={paginatedSuggestions.setPageSize}
+                  darkMode={true}
+                />
+              </div>
             </div>
           )}
+
         </div>
       )}
 
@@ -814,10 +809,10 @@ export default function CommentsView() {
             </div>
 
             <div className="divide-y divide-slate-800">
-              {discoveredPosts.length === 0 ? (
+              {paginatedDiscovered.totalItems === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">Chưa có bài viết nào được quét. Bấm "Bắt đầu quét & phân tích AI" ở trên.</div>
               ) : (
-                discoveredPosts.map(p => (
+                paginatedDiscovered.paginatedItems.map(p => (
                   <div key={p.id} className="p-4 hover:bg-slate-800/30 transition-colors space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <div className="flex items-center space-x-2">
@@ -839,9 +834,19 @@ export default function CommentsView() {
                 ))
               )}
             </div>
+
+            <Pagination
+              totalItems={paginatedDiscovered.totalItems}
+              currentPage={paginatedDiscovered.currentPage}
+              pageSize={paginatedDiscovered.pageSize}
+              onPageChange={paginatedDiscovered.setCurrentPage}
+              onPageSizeChange={paginatedDiscovered.setPageSize}
+              darkMode={true}
+            />
           </div>
         </div>
       )}
+
 
       {/* TAB 3: SCHEDULER & COOLDOWN */}
       {activeTab === 'schedule' && (
@@ -878,10 +883,10 @@ export default function CommentsView() {
             </div>
 
             <div className="divide-y divide-slate-800">
-              {schedules.length === 0 ? (
+              {paginatedSchedules.totalItems === 0 ? (
                 <div className="p-8 text-center text-xs text-slate-400">Chưa có bình luận nào được lên lịch.</div>
               ) : (
-                schedules.map(s => (
+                paginatedSchedules.paginatedItems.map(s => (
                   <div key={s.id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                     <div className="space-y-1">
                       <div className="flex items-center space-x-2 text-xs">
@@ -909,6 +914,15 @@ export default function CommentsView() {
                 ))
               )}
             </div>
+
+            <Pagination
+              totalItems={paginatedSchedules.totalItems}
+              currentPage={paginatedSchedules.currentPage}
+              pageSize={paginatedSchedules.pageSize}
+              onPageChange={paginatedSchedules.setCurrentPage}
+              onPageSizeChange={paginatedSchedules.setPageSize}
+              darkMode={true}
+            />
           </div>
         </div>
       )}
@@ -928,7 +942,7 @@ export default function CommentsView() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {campaigns.map(c => (
+            {paginatedCampaigns.paginatedItems.map(c => (
               <div key={c.id} className="bg-slate-900 border border-slate-800 p-5 rounded-2xl space-y-3">
                 <div className="flex items-center justify-between">
                   <h4 className="text-sm font-bold text-white">{c.name}</h4>
@@ -946,8 +960,20 @@ export default function CommentsView() {
               </div>
             ))}
           </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md">
+            <Pagination
+              totalItems={paginatedCampaigns.totalItems}
+              currentPage={paginatedCampaigns.currentPage}
+              pageSize={paginatedCampaigns.pageSize}
+              onPageChange={paginatedCampaigns.setCurrentPage}
+              onPageSizeChange={paginatedCampaigns.setPageSize}
+              darkMode={true}
+            />
+          </div>
         </div>
       )}
+
 
       {/* TAB 5: ANALYTICS */}
       {activeTab === 'analytics' && analytics && (
@@ -1057,11 +1083,11 @@ export default function CommentsView() {
               </h4>
             </div>
 
-            <div className="divide-y divide-slate-800 max-h-96 overflow-y-auto">
-              {logs.length === 0 ? (
+            <div className="divide-y divide-slate-800">
+              {paginatedLogs.totalItems === 0 ? (
                 <div className="p-6 text-center text-xs text-slate-400">Chưa có nhật ký hoạt động.</div>
               ) : (
-                logs.map(l => (
+                paginatedLogs.paginatedItems.map(l => (
                   <div key={l.id} className="p-3 text-xs flex items-center justify-between hover:bg-slate-800/40">
                     <div className="flex items-center space-x-2">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -1079,9 +1105,19 @@ export default function CommentsView() {
                 ))
               )}
             </div>
+
+            <Pagination
+              totalItems={paginatedLogs.totalItems}
+              currentPage={paginatedLogs.currentPage}
+              pageSize={paginatedLogs.pageSize}
+              onPageChange={paginatedLogs.setCurrentPage}
+              onPageSizeChange={paginatedLogs.setPageSize}
+              darkMode={true}
+            />
           </div>
         </div>
       )}
+
 
       {/* MODAL: Edit Comment */}
       {editingItem && (

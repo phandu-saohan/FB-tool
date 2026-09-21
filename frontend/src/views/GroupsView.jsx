@@ -22,6 +22,7 @@ import {
   joinGroup,
   bulkJoinGroups
 } from '../api';
+import Pagination, { usePagination } from '../components/Pagination';
 
 export default function GroupsView({ setActiveTab }) {
   const [groups, setGroups] = useState([]);
@@ -29,6 +30,15 @@ export default function GroupsView({ setActiveTab }) {
   const [keywordFilter, setKeywordFilter] = useState('');
   const [privacyFilter, setPrivacyFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
+  
+  const {
+    currentPage,
+    pageSize,
+    totalItems,
+    paginatedItems,
+    setCurrentPage,
+    setPageSize
+  } = usePagination(groups, 15);
   
   // Actions loading
   const [syncingJoined, setSyncingJoined] = useState(false);
@@ -339,7 +349,7 @@ export default function GroupsView({ setActiveTab }) {
                   </td>
                 </tr>
               ) : (
-                groups.map((grp) => (
+                paginatedItems.map((grp) => (
                   <tr key={grp.id} className="hover:bg-slate-800/40 transition">
                     <td className="p-4 text-center">
                       <input
@@ -402,6 +412,16 @@ export default function GroupsView({ setActiveTab }) {
             </tbody>
           </table>
         </div>
+
+        {/* Pagination Bar */}
+        <Pagination
+          totalItems={totalItems}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          darkMode={true}
+        />
       </div>
     </div>
   );

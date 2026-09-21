@@ -1,11 +1,11 @@
-import React, { useState, useEffect, useRef } from 'react';
 import { Terminal, RefreshCw, Trash2, ArrowDownCircle } from 'lucide-react';
 import { getLogs } from '../api';
+import Pagination, { usePagination } from '../components/Pagination';
 
 export default function LogsView() {
   const [logs, setLogs] = useState([]);
   const [filterLevel, setFilterLevel] = useState('ALL');
-  const [autoScroll, setAutoScroll] = useState(true);
+  const [autoScroll, setAutoScroll] = useState(false);
   const logContainerRef = useRef(null);
 
   useEffect(() => {
@@ -14,15 +14,9 @@ export default function LogsView() {
     return () => clearInterval(interval);
   }, []);
 
-  useEffect(() => {
-    if (autoScroll && logContainerRef.current) {
-      logContainerRef.current.scrollTop = logContainerRef.current.scrollHeight;
-    }
-  }, [logs, autoScroll]);
-
   const fetchLogs = async () => {
     try {
-      const res = await getLogs(150);
+      const res = await getLogs(300);
       setLogs(res.data || []);
     } catch (err) {
       console.error(err);
@@ -32,6 +26,15 @@ export default function LogsView() {
   const filteredLogs = filterLevel === 'ALL' 
     ? logs 
     : logs.filter(l => l.level === filterLevel);
+
+  const {
+    currentPage,
+    pageSize,
+    totalItems,
+    paginatedItems,
+    setCurrentPage,
+    setPageSize
+  } = usePagination(filteredLogs, 30);
 
   const getLevelColor = (level) => {
     switch (level) {
@@ -97,10 +100,10 @@ export default function LogsView() {
         </div>
 
         <div ref={logContainerRef} className="flex-1 overflow-y-auto space-y-1.5 px-2">
-          {filteredLogs.length === 0 ? (
+          {totalItems === 0 ? (
             <div className="text-slate-600 py-12 text-center">Chưa có nhật ký nào được ghi nhận.</div>
           ) : (
-            filteredLogs.map((item, i) => (
+            paginatedItems.map((item, i) => (
               <div key={i} className="flex items-start space-x-2 leading-relaxed hover:bg-slate-900/50 px-1 rounded transition">
                 <span className="text-slate-500 select-none shrink-0">{item.created_at}</span>
                 <span className={`shrink-0 ${getLevelColor(item.level)}`}>[{item.level}]</span>
@@ -112,7 +115,19 @@ export default function LogsView() {
             ))
           )}
         </div>
+
+        <Pagination
+          totalItems={totalItems}
+          currentPage={currentPage}
+          pageSize={pageSize}
+          onPageChange={setCurrentPage}
+          onPageSizeChange={setPageSize}
+          pageSizeOptions={[20, 30, 50, 100]}
+          darkMode={true}
+          className="rounded-b-xl border-t border-slate-800"
+        />
       </div>
     </div>
   );
 }
+
