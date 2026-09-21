@@ -45,62 +45,109 @@ router = APIRouter(prefix="/api/email", tags=["Email Campaign Queue & Sending"])
 
 @router.get("/dashboard", response_model=EmailDashboardStats)
 def get_email_dashboard(db: Session = Depends(get_db)):
-    # 1. Aggregate Quota across all active accounts
-    aggregate_quota = EmailQuotaManager.get_aggregate_quota_status(db)
-    setting = db.query(EmailProviderSetting).first()
-    provider_name = setting.provider_name if setting else "Hostinger"
+    try:
+        # 1. Aggregate Quota across all active accounts
+        aggregate_quota = EmailQuotaManager.get_aggregate_quota_status(db)
+        setting = db.query(EmailProviderSetting).first()
+        provider_name = setting.provider_name if setting else "Hostinger"
 
-    # 2. Metrics across all campaigns
-    total_campaigns = db.query(EmailCampaign).count()
-    recip_stats = db.query(
-        EmailCampaignRecipient.status,
-        func.count(EmailCampaignRecipient.id)
-    ).group_by(EmailCampaignRecipient.status).all()
+        # 2. Metrics across all campaigns
+        total_campaigns = db.query(EmailCampaign).count()
+        recip_stats = db.query(
+            EmailCampaignRecipient.status,
+            func.count(EmailCampaignRecipient.id)
+        ).group_by(EmailCampaignRecipient.status).all()
 
-    stats_dict = dict(recip_stats)
-    metrics = {
-        "total_campaigns": total_campaigns,
-        "total_recipients": sum(stats_dict.values()),
-        "sent_count": stats_dict.get("SENT", 0),
-        "queued_count": stats_dict.get("QUEUED", 0),
-        "processing_count": stats_dict.get("PROCESSING", 0),
-        "retry_count": stats_dict.get("RETRY", 0),
-        "failed_count": stats_dict.get("FAILED", 0),
-        "bounced_count": stats_dict.get("BOUNCED", 0),
-        "skipped_count": stats_dict.get("SKIPPED", 0)
-    }
+        stats_dict = dict(recip_stats)
+        metrics = {
+            "total_campaigns": total_campaigns,
+            "total_recipients": sum(stats_dict.values()),
+            "sent_count": stats_dict.get("SENT", 0),
+            "queued_count": stats_dict.get("QUEUED", 0),
+            "processing_count": stats_dict.get("PROCESSING", 0),
+            "retry_count": stats_dict.get("RETRY", 0),
+            "failed_count": stats_dict.get("FAILED", 0),
+            "bounced_count": stats_dict.get("BOUNCED", 0),
+            "skipped_count": stats_dict.get("SKIPPED", 0)
+        }
 
-    # 3. Active Campaigns
-    active_camps = db.query(EmailCampaign).filter(
-        EmailCampaign.status.in_(["RUNNING", "PAUSED", "DRAFT"])
-    ).order_by(EmailCampaign.updated_at.desc()).limit(10).all()
+        # 3. Active Campaigns
+        active_camps = db.query(EmailCampaign).filter(
+            EmailCampaign.status.in_(["RUNNING", "PAUSED", "DRAFT"])
+        ).order_by(EmailCampaign.updated_at.desc()).limit(10).all()
 
-    camp_responses = []
-    effective_limit = aggregate_quota.get("effective_limit", 300)
-    for c in active_camps:
-        c_dict = CampaignResponse.model_validate(c)
-        if c.status == "RUNNING" and c.remaining_count > 0 and effective_limit > 0:
-            c_dict.estimated_days_remaining = round(c.remaining_count / effective_limit, 1)
-        camp_responses.append(c_dict)
+        camp_responses = []
+        effective_limit = aggregate_quota.get("effective_limit", 300)
+        for c in active_camps:
+            try:
+                c_dict = CampaignResponse.model_validate(c)
+                if c.status == "RUNNING" and c.remaining_count > 0 and effective_limit > 0:
+                    c_dict.estimated_days_remaining = round(c.remaining_count / effective_limit, 1)
+                camp_responses.append(c_dict)
+            except Exception:
+                pass
 
-    # 4. Provider Status & Rotation Indicator
-    cb_tripped, cb_reason = EmailCircuitBreaker.is_tripped(db, provider_name)
-    provider_status = {
-        "provider_name": provider_name,
-        "is_paused": setting.is_paused if setting else False,
-        "circuit_breaker_tripped": cb_tripped,
-        "pause_reason": setting.pause_reason if setting else None,
-        "consecutive_failures": setting.consecutive_failures if setting else 0,
-        "current_active_sender": aggregate_quota.get("current_active_sender", "Default")
-    }
+        # 4. Provider Status & Rotation Indicator
+        cb_tripped, cb_reason = EmailCircuitBreaker.is_tripped(db, provider_name)
+        provider_status = {
+            "provider_name": provider_name,
+            "is_paused": setting.is_paused if setting else False,
+            "circuit_breaker_tripped": cb_tripped,
+            "pause_reason": setting.pause_reason if setting else None,
+            "consecutive_failures": setting.consecutive_failures if setting else 0,
+            "current_active_sender": aggregate_quota.get("current_active_sender", "Default")
+        }
 
-    return {
-        "quota": aggregate_quota,
-        "metrics": metrics,
-        "provider_status": provider_status,
-        "active_campaigns": camp_responses,
-        "accounts": aggregate_quota.get("accounts_breakdown", [])
-    }
+        return {
+            "quota": aggregate_quota,
+            "metrics": metrics,
+            "provider_status": provider_status,
+            "active_campaigns": camp_responses,
+            "accounts": aggregate_quota.get("accounts_breakdown", [])
+        }
+    except Exception as e:
+        from app.utils.logger import log_error
+        log_error("EMAIL_DASHBOARD", f"Error compiling email dashboard: {e}")
+        date_str = EmailQuotaManager.get_local_date_str()
+        return {
+            "quota": {
+                "date": date_str,
+                "total_accounts": 0,
+                "active_accounts": 0,
+                "current_active_sender": "Chưa thiết lập",
+                "daily_limit": 300,
+                "effective_limit": 270,
+                "used_count": 0,
+                "reserved_count": 0,
+                "remaining_count": 270,
+                "percent_used": 0.0,
+                "is_exhausted": False,
+                "resets_at": f"{date_str} 23:59:59 (+07:00)",
+                "accounts_breakdown": []
+            },
+            "metrics": {
+                "total_campaigns": 0,
+                "total_recipients": 0,
+                "sent_count": 0,
+                "queued_count": 0,
+                "processing_count": 0,
+                "retry_count": 0,
+                "failed_count": 0,
+                "bounced_count": 0,
+                "skipped_count": 0
+            },
+            "provider_status": {
+                "provider_name": "Hostinger",
+                "is_paused": False,
+                "circuit_breaker_tripped": False,
+                "pause_reason": None,
+                "consecutive_failures": 0,
+                "current_active_sender": "Chưa thiết lập"
+            },
+            "active_campaigns": [],
+            "accounts": []
+        }
+
 
 # ---------------------------------------------------------------------------
 # CAMPAIGN CRUD & ACTIONS

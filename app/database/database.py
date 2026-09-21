@@ -50,23 +50,54 @@ def get_db():
 
 def init_db():
     import app.database.models
+    from sqlalchemy import inspect, text
+
+    # 1. Create any tables that don't exist yet
     Base.metadata.create_all(bind=engine)
 
-    # Safe auto-migration for SQLite to add missing columns if table already exists
+    # 2. Automatically add any newly defined columns to existing tables
     try:
-        with engine.connect() as conn:
-            from sqlalchemy import text
-            res = conn.execute(text("PRAGMA table_info(email_provider_settings)"))
-            cols = [row[1] for row in res.fetchall()]
-            if cols:
-                if 'name' not in cols:
-                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN name VARCHAR(100) DEFAULT 'Tài khoản mặc định'"))
-                if 'is_active' not in cols:
-                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN is_active BOOLEAN DEFAULT 1"))
-                if 'priority' not in cols:
-                    conn.execute(text("ALTER TABLE email_provider_settings ADD COLUMN priority INTEGER DEFAULT 1"))
-                conn.commit()
-    except Exception:
-        pass
+        inspector = inspect(engine)
+        existing_tables = set(inspector.get_table_names())
+        
+        with engine.begin() as conn:
+            for table_name, table in Base.metadata.tables.items():
+                if table_name in existing_tables:
+                    existing_cols = {c['name'] for c in inspector.get_columns(table_name)}
+                    for col in table.columns:
+                        if col.name not in existing_cols:
+                            try:
+                                col_type = col.type.compile(engine.dialect)
+                                log_info('DATABASE', f'Auto-migrating: Adding column {table_name}.{col.name} ({col_type})')
+                                conn.execute(text(f'ALTER TABLE "{table_name}" ADD COLUMN "{col.name}" {col_type}'))
+                            except Exception as col_err:
+                                log_warning('DATABASE', f'Notice: Could not add column {table_name}.{col.name}: {col_err}')
+    except Exception as mig_err:
+        log_warning('DATABASE', f'Auto-migration check notice: {mig_err}')
+
+    # 3. Seed default email account if none exists
+    try:
+        from app.database.models import EmailProviderSetting
+        db = SessionLocal()
+        try:
+            acc_count = db.query(EmailProviderSetting).count()
+            if acc_count == 0:
+                default_acc = EmailProviderSetting(
+                    name="Tài khoản mặc định",
+                    is_active=True,
+                    priority=1,
+                    provider_name="MockEmailProvider",
+                    from_email="outreach@aesthetichub.vn",
+                    from_name="Aesthetic Conference Intelligence",
+                    daily_limit=300
+                )
+                db.add(default_acc)
+                db.commit()
+                log_info('DATABASE', 'Created initial default email account.')
+        finally:
+            db.close()
+    except Exception as seed_err:
+        log_warning('DATABASE', f'Initial seed notice: {seed_err}')
 
     log_info('DATABASE', 'Database tables verified and initialized')
+
