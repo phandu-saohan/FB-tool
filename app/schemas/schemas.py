@@ -147,3 +147,14 @@ class SettingsUpdate(BaseModel):
     MAX_POSTS_PER_RUN: Optional[int] = None
     BROWSER_HEADLESS: Optional[bool] = None
     CHROME_EXECUTABLE_PATH: Optional[str] = None
+
+class ImportCookiesRequest(BaseModel):
+    cookie_data: str
+
+class ImportCookiesResponse(BaseModel):
+    success: bool
+    is_logged_in: bool
+    status: str
+    message: str
+    cookies_count: int = 0
+

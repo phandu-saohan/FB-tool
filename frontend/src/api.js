@@ -10,6 +10,8 @@ export const startBrowser = () => api.post('/browser/start');
 export const stopBrowser = () => api.post('/browser/stop');
 export const openManualLogin = () => api.post('/browser/open-login');
 export const checkLoginStatus = () => api.get('/browser/login-check');
+export const importCookies = (cookie_data) => api.post('/browser/import-cookies', { cookie_data });
+
 
 export const getGroups = (params) => api.get('/groups', { params });
 export const searchGroups = (keyword, max_results = 50) => api.post('/groups/search', { keyword, max_results }, { timeout: 300000 });
