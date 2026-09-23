@@ -121,7 +121,9 @@ export const updateEmailAccount = (id, data) => api.put(`/email/accounts/${id}`,
 export const deleteEmailAccount = (id) => api.delete(`/email/accounts/${id}`);
 export const toggleEmailAccountActive = (id) => api.post(`/email/accounts/${id}/toggle-active`);
 export const testEmailAccountConnection = (id) => api.post(`/email/accounts/${id}/test-connection`);
+export const testDraftEmailAccountConnection = (data) => api.post('/email/accounts/test-draft', data);
 export const resetEmailAccountCircuitBreaker = (id) => api.post(`/email/accounts/${id}/reset-circuit-breaker`);
 export const resetEmailAccountCooldown = (id) => api.post(`/email/accounts/${id}/reset-cooldown`);
+
 
 export default api;

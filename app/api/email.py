@@ -771,6 +771,29 @@ def toggle_email_account_active(account_id: int, db: Session = Depends(get_db)):
     EmailAuditLogger.log(db, action="TOGGLE_ACCOUNT_ACTIVE", metadata={"id": acc.id, "is_active": acc.is_active})
     return _format_account_response(db, acc)
 
+@router.post("/accounts/test-draft")
+async def test_draft_smtp_connection(data: EmailAccountCreate):
+    """Tests SMTP connection for unsaved account settings directly from modal."""
+    if data.provider_name == "MockEmailProvider":
+        provider = MockEmailProvider()
+        success, message = await provider.verify_connection_detailed()
+    else:
+        provider = HostingerSMTPProvider(
+            smtp_host=data.smtp_host,
+            smtp_port=data.smtp_port,
+            smtp_username=data.smtp_username,
+            smtp_password=data.smtp_password,
+            use_ssl=data.use_ssl,
+            use_tls=data.use_tls
+        )
+        success, message = await provider.verify_connection_detailed()
+
+    return {
+        "success": success,
+        "account_name": data.name,
+        "message": message
+    }
+
 @router.post("/accounts/{account_id}/test-connection")
 async def test_account_smtp_connection(account_id: int, db: Session = Depends(get_db)):
     acc = db.query(EmailProviderSetting).filter_by(id=account_id).first()
@@ -779,6 +802,7 @@ async def test_account_smtp_connection(account_id: int, db: Session = Depends(ge
 
     if acc.provider_name == "MockEmailProvider":
         provider = MockEmailProvider()
+        success, message = await provider.verify_connection_detailed()
     else:
         provider = HostingerSMTPProvider(
             smtp_host=acc.smtp_host,
@@ -788,14 +812,15 @@ async def test_account_smtp_connection(account_id: int, db: Session = Depends(ge
             use_ssl=acc.use_ssl,
             use_tls=acc.use_tls
         )
+        success, message = await provider.verify_connection_detailed()
     
-    success = await provider.verify_connection()
     return {
         "success": success,
         "account_id": acc.id,
         "account_name": acc.name,
-        "message": f"Kết nối máy chủ SMTP của tài khoản '{acc.name}' thành công!" if success else f"Không thể kết nối đến máy chủ SMTP của tài khoản '{acc.name}'."
+        "message": message
     }
+
 
 @router.post("/accounts/{account_id}/reset-circuit-breaker")
 def reset_account_circuit_breaker(account_id: int, db: Session = Depends(get_db)):

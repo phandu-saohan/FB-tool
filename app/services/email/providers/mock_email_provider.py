@@ -89,6 +89,12 @@ class MockEmailProvider(EmailProvider):
     async def verify_connection(self) -> bool:
         return self.should_verify_succeed
 
+    async def verify_connection_detailed(self) -> tuple[bool, str]:
+        if self.should_verify_succeed:
+            return True, "Kết nối Mock Email Provider (chế độ mô phỏng) thành công!"
+        return False, "Mock Email Provider đang giả lập trạng thái lỗi kết nối."
+
+
     def get_limits(self) -> Dict[str, Any]:
         return {
             "provider": "MockEmailProvider",

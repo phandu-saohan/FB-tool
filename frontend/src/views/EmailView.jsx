@@ -62,9 +62,11 @@ import {
   deleteEmailAccount,
   toggleEmailAccountActive,
   testEmailAccountConnection,
+  testDraftEmailAccountConnection,
   resetEmailAccountCircuitBreaker,
   exportCampaignZaloOA
 } from '../api';
+
 import Pagination, { usePagination } from '../components/Pagination';
 import ExcelUploadModal from '../components/ExcelUploadModal';
 import EmailRichEditor from '../components/EmailRichEditor';
@@ -86,8 +88,11 @@ export default function EmailView() {
   const [showAccountModal, setShowAccountModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState(null);
   const [testingAccountId, setTestingAccountId] = useState(null);
+  const [isTestingDraft, setIsTestingDraft] = useState(false);
+  const [draftTestResult, setDraftTestResult] = useState(null);
 
   const [accountForm, setAccountForm] = useState({
+
     name: 'Hostinger Outreach 01',
     priority: 1,
     is_active: true,
@@ -457,31 +462,89 @@ export default function EmailView() {
     }
   };
 
-  // Multi-Account Handlers
+  // Multi-Account Handlers & Presets
+  const applyAccountPreset = (type) => {
+    setDraftTestResult(null);
+    if (type === 'Gmail' || type === 'Google') {
+      const nextPriority = accounts.length + 1;
+      setAccountForm((prev) => ({
+        ...prev,
+        name: prev.name.startsWith('Hostinger') || !prev.name ? `Gmail Cá Nhân 0${nextPriority}` : prev.name,
+        provider_name: 'Gmail',
+        smtp_host: 'smtp.gmail.com',
+        smtp_port: 587,
+        use_ssl: false,
+        use_tls: true,
+        daily_limit: 300,
+        safety_margin_pct: 10.0,
+        hourly_limit: 30,
+        min_delay_seconds: 20,
+        max_delay_seconds: 45
+      }));
+    } else if (type === 'Hostinger') {
+      const nextPriority = accounts.length + 1;
+      setAccountForm((prev) => ({
+        ...prev,
+        name: prev.name.startsWith('Gmail') || !prev.name ? `Hostinger Outreach 0${nextPriority}` : prev.name,
+        provider_name: 'Hostinger',
+        smtp_host: 'smtp.hostinger.com',
+        smtp_port: 465,
+        use_ssl: true,
+        use_tls: false,
+        daily_limit: 300,
+        safety_margin_pct: 10.0,
+        hourly_limit: 30,
+        min_delay_seconds: 15,
+        max_delay_seconds: 45
+      }));
+    } else if (type === 'Mock') {
+      setAccountForm((prev) => ({
+        ...prev,
+        name: prev.name || 'Mock Email Sandbox',
+        provider_name: 'MockEmailProvider',
+        smtp_host: 'mock.local',
+        smtp_port: 25,
+        use_ssl: false,
+        use_tls: false,
+        daily_limit: 1000,
+        min_delay_seconds: 1,
+        max_delay_seconds: 2
+      }));
+    } else if (type === 'Custom') {
+      setAccountForm((prev) => ({
+        ...prev,
+        provider_name: 'Custom SMTP',
+        use_ssl: false,
+        use_tls: true
+      }));
+    }
+  };
+
   const handleOpenCreateAccount = () => {
     if (accounts.length >= 10) {
       showNotification('Đã đạt giới hạn tối đa 10 cấu hình email gửi.', true);
       return;
     }
     const nextPriority = accounts.length + 1;
+    setDraftTestResult(null);
     setAccountForm({
-      name: `Hostinger Outreach 0${nextPriority}`,
+      name: `Gmail Cá Nhân 0${nextPriority}`,
       priority: nextPriority,
       is_active: true,
-      provider_name: 'Hostinger',
-      smtp_host: 'smtp.hostinger.com',
-      smtp_port: 465,
-      smtp_username: `outreach${nextPriority}@aesthetichub.vn`,
+      provider_name: 'Gmail',
+      smtp_host: 'smtp.gmail.com',
+      smtp_port: 587,
+      smtp_username: '',
       smtp_password: '',
-      use_ssl: true,
-      use_tls: false,
-      from_email: `outreach${nextPriority}@aesthetichub.vn`,
+      use_ssl: false,
+      use_tls: true,
+      from_email: '',
       from_name: 'Aesthetic Conference Hub',
-      reply_to: 'support@aesthetichub.vn',
+      reply_to: '',
       daily_limit: 300,
       safety_margin_pct: 10.0,
       hourly_limit: 30,
-      min_delay_seconds: 15,
+      min_delay_seconds: 20,
       max_delay_seconds: 45,
       sending_window_start: '08:00',
       sending_window_end: '18:00'
@@ -491,6 +554,7 @@ export default function EmailView() {
   };
 
   const handleOpenEditAccount = (acc) => {
+    setDraftTestResult(null);
     setAccountForm({
       name: acc.name,
       priority: acc.priority,
@@ -516,6 +580,31 @@ export default function EmailView() {
     setEditingAccount(acc);
     setShowAccountModal(true);
   };
+
+  const handleTestDraftConnection = async () => {
+    if (!accountForm.smtp_host || !accountForm.smtp_username) {
+      showNotification('Vui lòng nhập SMTP Host và SMTP Username trước khi kiểm tra.', true);
+      return;
+    }
+    setIsTestingDraft(true);
+    setDraftTestResult(null);
+    try {
+      const res = await testDraftEmailAccountConnection(accountForm);
+      setDraftTestResult(res.data);
+      if (res.data.success) {
+        showNotification(res.data.message);
+      } else {
+        showNotification(res.data.message, true);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message;
+      setDraftTestResult({ success: false, message: msg });
+      showNotification('Lỗi kết nối: ' + msg, true);
+    } finally {
+      setIsTestingDraft(false);
+    }
+  };
+
 
   const handleSaveAccount = async (e) => {
     e.preventDefault();
@@ -1378,10 +1467,27 @@ export default function EmailView() {
 
                           {/* Account Name & Sender */}
                           <td className="p-3">
-                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5">
-                              {acc.name}
+                            <div className="font-bold text-slate-800 text-sm flex items-center gap-1.5 flex-wrap">
+                              <span>{acc.name}</span>
                               {acc.is_active && !acc.is_paused && !acc.is_exhausted && (
-                                <span className="w-2 h-2 rounded-full bg-emerald-500" title="Đang sẵn sàng gửi"></span>
+                                <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Đang sẵn sàng gửi"></span>
+                              )}
+                              {(acc.provider_name === 'Gmail' || (acc.smtp_host || '').toLowerCase().includes('gmail')) ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 shrink-0">
+                                  Google / Gmail
+                                </span>
+                              ) : acc.provider_name === 'Hostinger' || (acc.smtp_host || '').toLowerCase().includes('hostinger') ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200 shrink-0">
+                                  Hostinger
+                                </span>
+                              ) : acc.provider_name === 'MockEmailProvider' ? (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200 shrink-0">
+                                  Mock Sandbox
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200 shrink-0">
+                                  {acc.provider_name || 'SMTP'}
+                                </span>
                               )}
                             </div>
                             <div className="text-xs text-slate-500 font-medium">
@@ -1391,6 +1497,7 @@ export default function EmailView() {
                               <div className="text-[10px] text-slate-400">Reply-To: {acc.reply_to}</div>
                             )}
                           </td>
+
 
                           {/* SMTP Host */}
                           <td className="p-3">
@@ -1570,6 +1677,92 @@ export default function EmailView() {
             </div>
 
             <form onSubmit={handleSaveAccount} className="space-y-4 text-xs">
+              {/* Quick Provider Presets */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 space-y-2">
+                <span className="font-semibold text-slate-700 block text-xs">
+                  Chọn mẫu cấu hình nhanh (1-Click Presets):
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => applyAccountPreset('Gmail')}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition ${
+                      accountForm.provider_name === 'Gmail' || (accountForm.smtp_host || '').includes('gmail')
+                        ? 'bg-rose-50 border-rose-400 text-rose-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-rose-500"></span>
+                    Google / Gmail Cá Nhân
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyAccountPreset('Hostinger')}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition ${
+                      accountForm.provider_name === 'Hostinger' && !(accountForm.smtp_host || '').includes('gmail')
+                        ? 'bg-indigo-50 border-indigo-400 text-indigo-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-indigo-500"></span>
+                    Hostinger Mail
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyAccountPreset('Custom')}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition ${
+                      accountForm.provider_name === 'Custom SMTP' || accountForm.provider_name === 'Custom'
+                        ? 'bg-sky-50 border-sky-400 text-sky-700 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-sky-500"></span>
+                    SMTP Tùy Chỉnh
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => applyAccountPreset('Mock')}
+                    className={`px-3 py-1.5 rounded-lg border text-xs font-semibold flex items-center gap-1.5 transition ${
+                      accountForm.provider_name === 'MockEmailProvider'
+                        ? 'bg-slate-200 border-slate-400 text-slate-800 shadow-xs'
+                        : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                    }`}
+                  >
+                    <span className="w-2 h-2 rounded-full bg-slate-400"></span>
+                    Mô Phỏng (Mock Test)
+                  </button>
+                </div>
+              </div>
+
+              {/* Gmail Setup Instructions Callout */}
+              {(accountForm.provider_name === 'Gmail' || (accountForm.smtp_host || '').toLowerCase().includes('gmail')) && (
+                <div className="bg-rose-50 border border-rose-200 rounded-xl p-3.5 text-rose-900 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold flex items-center gap-1.5 text-xs text-rose-800">
+                      <Mail className="w-4 h-4 text-rose-600" />
+                      Hướng dẫn kết nối Gmail cá nhân (Mật khẩu ứng dụng 16 ký tự)
+                    </span>
+                    <a
+                      href="https://myaccount.google.com/apppasswords"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[11px] text-rose-700 underline font-semibold hover:text-rose-900"
+                    >
+                      Mở trang tạo App Password Google ↗
+                    </a>
+                  </div>
+                  <ol className="list-decimal list-inside text-[11px] text-rose-800 space-y-1 leading-relaxed">
+                    <li>Bật <strong>Xác minh 2 bước (2-Step Verification)</strong> trên tài khoản Google cá nhân của bạn.</li>
+                    <li>Truy cập <a href="https://myaccount.google.com/apppasswords" target="_blank" rel="noreferrer" className="underline font-mono">myaccount.google.com/apppasswords</a>.</li>
+                    <li>Đặt tên ứng dụng (Ví dụ: <code>FB Tool Outreach</code>) rồi bấm <strong>Tạo (Create)</strong>.</li>
+                    <li>Google sẽ cấp 1 mã <strong>16 ký tự</strong> (VD: <code>abcd efgh ijkl mnop</code>). Hãy sao chép và dán vào ô <strong>SMTP Password</strong> (hệ thống tự động loại bỏ khoảng cách).</li>
+                  </ol>
+                  <div className="text-[10px] text-rose-600 italic">
+                    * Lưu ý: Google cá nhân cho phép gửi tối đa 500 email/ngày. Khuyên dùng định mức 300 email/ngày và độ trễ 20–45s để tài khoản an toàn tuyệt đối.
+                  </div>
+                </div>
+              )}
+
               {/* Basic & Priority */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="sm:col-span-2">
@@ -1579,7 +1772,7 @@ export default function EmailView() {
                     required
                     value={accountForm.name}
                     onChange={(e) => setAccountForm({ ...accountForm, name: e.target.value })}
-                    placeholder="VD: Hostinger Outreach 01"
+                    placeholder="VD: Gmail Cá Nhân 01 hoặc Hostinger Outreach"
                     className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
@@ -1604,10 +1797,15 @@ export default function EmailView() {
                   <label className="font-semibold text-slate-700">Loại Provider</label>
                   <select
                     value={accountForm.provider_name}
-                    onChange={(e) => setAccountForm({ ...accountForm, provider_name: e.target.value })}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      applyAccountPreset(val);
+                    }}
                     className="w-full mt-1 p-2 border border-slate-300 rounded bg-white font-medium"
                   >
-                    <option value="Hostinger">Hostinger SMTP (Gửi thực qua smtplib)</option>
+                    <option value="Gmail">Google / Gmail Cá Nhân (smtp.gmail.com - Cổng 587 TLS)</option>
+                    <option value="Hostinger">Hostinger SMTP (smtp.hostinger.com - Cổng 465 SSL)</option>
+                    <option value="Custom">SMTP Tùy Chỉnh (Tự nhập Host & Port)</option>
                     <option value="MockEmailProvider">Mock Email Provider (Mô phỏng thử nghiệm / Test)</option>
                   </select>
                 </div>
@@ -1633,7 +1831,7 @@ export default function EmailView() {
                     required
                     value={accountForm.smtp_host}
                     onChange={(e) => setAccountForm({ ...accountForm, smtp_host: e.target.value })}
-                    placeholder="smtp.hostinger.com"
+                    placeholder="smtp.gmail.com hoặc smtp.hostinger.com"
                     className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
@@ -1658,18 +1856,20 @@ export default function EmailView() {
                     required
                     value={accountForm.smtp_username}
                     onChange={(e) => setAccountForm({ ...accountForm, smtp_username: e.target.value })}
-                    placeholder="outreach@aesthetichub.vn"
+                    placeholder={accountForm.provider_name === 'Gmail' || (accountForm.smtp_host || '').includes('gmail') ? 'yourname@gmail.com' : 'outreach@aesthetichub.vn'}
                     className="w-full mt-1 p-2 border border-slate-300 rounded"
                   />
                 </div>
                 <div>
-                  <label className="font-semibold text-slate-700">SMTP Password</label>
+                  <label className="font-semibold text-slate-700">
+                    SMTP Password {accountForm.provider_name === 'Gmail' || (accountForm.smtp_host || '').includes('gmail') ? '(Mật khẩu ứng dụng)' : ''}
+                  </label>
                   <input
                     type="password"
                     value={accountForm.smtp_password}
                     onChange={(e) => setAccountForm({ ...accountForm, smtp_password: e.target.value })}
-                    placeholder="••••••••••••"
-                    className="w-full mt-1 p-2 border border-slate-300 rounded"
+                    placeholder={accountForm.provider_name === 'Gmail' || (accountForm.smtp_host || '').includes('gmail') ? 'abcd efgh ijkl mnop (16 ký tự)' : '••••••••••••'}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded font-mono"
                   />
                 </div>
               </div>
@@ -1804,23 +2004,59 @@ export default function EmailView() {
                 </div>
               </div>
 
+              {/* Draft Test Result Feedback Banner */}
+              {draftTestResult && (
+                <div className={`p-3 rounded-xl border text-xs ${
+                  draftTestResult.success
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}>
+                  <div className="font-bold flex items-center gap-1.5">
+                    {draftTestResult.success ? '✅ Kết Nối Máy Chủ SMTP Thành Công!' : '❌ Kết Nối Máy Chủ SMTP Thất Bại:'}
+                  </div>
+                  <div className="mt-1 leading-relaxed">{draftTestResult.message}</div>
+                </div>
+              )}
+
               {/* Modal Buttons */}
-              <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+              <div className="pt-4 border-t border-slate-100 flex flex-wrap items-center justify-between gap-3">
                 <button
                   type="button"
-                  onClick={() => setShowAccountModal(false)}
-                  className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition"
+                  disabled={isTestingDraft}
+                  onClick={handleTestDraftConnection}
+                  className="px-3.5 py-2 border border-blue-200 text-blue-700 bg-blue-50/70 hover:bg-blue-100/80 font-bold rounded-lg transition flex items-center gap-1.5 text-xs shadow-2xs"
                 >
-                  Hủy
+                  {isTestingDraft ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin text-blue-600" />
+                      Đang kiểm tra kết nối...
+                    </>
+                  ) : (
+                    <>
+                      <Server className="w-3.5 h-3.5 text-blue-600" />
+                      Kiểm Tra Kết Nối Ngay
+                    </>
+                  )}
                 </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition"
-                >
-                  {editingAccount ? 'Lưu Thay Đổi' : 'Tạo Cấu Hình'}
-                </button>
+
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={() => setShowAccountModal(false)}
+                    className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg hover:bg-slate-50 transition font-semibold"
+                  >
+                    Hủy
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-lg shadow-sm transition"
+                  >
+                    {editingAccount ? 'Lưu Thay Đổi' : 'Tạo Cấu Hình'}
+                  </button>
+                </div>
               </div>
             </form>
+
           </div>
         </div>
       )}

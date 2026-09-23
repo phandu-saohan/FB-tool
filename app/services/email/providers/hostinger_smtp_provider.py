@@ -36,6 +36,13 @@ class HostingerSMTPProvider(EmailProvider):
         self.daily_limit = daily_limit
         self.timeout = timeout
 
+    def _get_clean_password(self) -> str:
+        pw = self.smtp_password or ""
+        host_lower = (self.smtp_host or "").lower()
+        if "gmail" in host_lower or "google" in host_lower:
+            pw = pw.replace(" ", "").strip()
+        return pw
+
     def _create_connection(self):
         context = ssl.create_default_context()
         if self.use_ssl:
@@ -45,9 +52,11 @@ class HostingerSMTPProvider(EmailProvider):
             if self.use_tls:
                 server.starttls(context=context)
 
-        if self.smtp_username and self.smtp_password:
-            server.login(self.smtp_username, self.smtp_password)
+        clean_pw = self._get_clean_password()
+        if self.smtp_username and clean_pw:
+            server.login(self.smtp_username, clean_pw)
         return server
+
 
     def _send_sync(
         self,
@@ -176,15 +185,29 @@ class HostingerSMTPProvider(EmailProvider):
             custom_headers
         )
 
-    def _verify_sync(self) -> bool:
+    def _verify_sync_detailed(self) -> tuple[bool, str]:
         server = None
         try:
             server = self._create_connection()
             status, _ = server.noop()
-            return status == 250
+            if status == 250:
+                return True, f"Kết nối máy chủ SMTP '{self.smtp_host}:{self.smtp_port}' thành công!"
+            return False, f"Máy chủ SMTP phản hồi mã trạng thái: {status}"
+        except smtplib.SMTPAuthenticationError as e:
+            err_str = str(e)
+            host_lower = (self.smtp_host or "").lower()
+            if "gmail" in host_lower or "google" in host_lower:
+                return False, (
+                    "Google từ chối xác thực (Lỗi 535 / Mật khẩu không đúng): "
+                    "Đối với tài khoản Gmail/Google cá nhân, bạn cần BẬT 'Xác minh 2 bước' "
+                    "và tạo 'Mật khẩu ứng dụng' (App Password - 16 ký tự) tại https://myaccount.google.com/apppasswords. "
+                    "Không được dùng mật khẩu đăng nhập Gmail thông thường."
+                )
+            return False, f"Lỗi xác thực SMTP: Tên đăng nhập hoặc mật khẩu không chính xác ({err_str})"
+        except (smtplib.SMTPConnectError, smtplib.SMTPServerDisconnected, TimeoutError, OSError) as e:
+            return False, f"Không thể kết nối đến máy chủ {self.smtp_host}:{self.smtp_port}. Vui lòng kiểm tra địa chỉ host, cổng và cấu hình SSL/TLS ({str(e)})"
         except Exception as e:
-            logger.warning(f"Hostinger SMTP verify failed: {str(e)}")
-            return False
+            return False, f"Lỗi kết nối SMTP: {str(e)}"
         finally:
             if server:
                 try:
@@ -192,8 +215,16 @@ class HostingerSMTPProvider(EmailProvider):
                 except Exception:
                     pass
 
+    def _verify_sync(self) -> bool:
+        ok, _ = self._verify_sync_detailed()
+        return ok
+
     async def verify_connection(self) -> bool:
         return await asyncio.to_thread(self._verify_sync)
+
+    async def verify_connection_detailed(self) -> tuple[bool, str]:
+        return await asyncio.to_thread(self._verify_sync_detailed)
+
 
     def get_limits(self) -> Dict[str, Any]:
         return {
