@@ -1,6 +1,6 @@
 from datetime import datetime
 from typing import Optional, List, Dict, Any
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class CampaignCreate(BaseModel):
     name: str
@@ -52,10 +52,10 @@ class CampaignResponse(BaseModel):
     failed_count: int
     skipped_count: int
     remaining_count: int
-    opened_count: int = 0
-    clicked_count: int = 0
-    open_rate: float = 0.0
-    click_rate: float = 0.0
+    opened_count: Optional[int] = 0
+    clicked_count: Optional[int] = 0
+    open_rate: Optional[float] = 0.0
+    click_rate: Optional[float] = 0.0
     content_html: Optional[str] = None
     content_plain: Optional[str] = None
     preview_text: Optional[str] = None
@@ -68,6 +68,16 @@ class CampaignResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     estimated_days_remaining: Optional[float] = None
+
+    @field_validator("opened_count", "clicked_count", mode="before")
+    @classmethod
+    def set_int_zero(cls, v):
+        return int(v) if v is not None else 0
+
+    @field_validator("open_rate", "click_rate", mode="before")
+    @classmethod
+    def set_float_zero(cls, v):
+        return float(v) if v is not None else 0.0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -105,11 +115,16 @@ class RecipientResponse(BaseModel):
     error_code: Optional[str] = None
     error_message: Optional[str] = None
     opened_at: Optional[datetime] = None
-    open_count: int = 0
+    open_count: Optional[int] = 0
     clicked_at: Optional[datetime] = None
-    click_count: int = 0
+    click_count: Optional[int] = 0
     device_type: Optional[str] = None
     created_at: datetime
+
+    @field_validator("open_count", "click_count", mode="before")
+    @classmethod
+    def set_zero_if_none(cls, v):
+        return int(v) if v is not None else 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -210,10 +225,25 @@ class ProviderSettingResponse(BaseModel):
     cooldown_until: Optional[datetime] = None
     telegram_bot_token: Optional[str] = None
     telegram_chat_id: Optional[str] = None
-    telegram_alerts_enabled: bool = False
-    telegram_notify_on_complete: bool = True
-    telegram_notify_on_error: bool = True
+    telegram_alerts_enabled: Optional[bool] = False
+    telegram_notify_on_complete: Optional[bool] = True
+    telegram_notify_on_error: Optional[bool] = True
     tracking_base_url: Optional[str] = None
+
+    @field_validator("telegram_alerts_enabled", mode="before")
+    @classmethod
+    def set_telegram_alerts_enabled(cls, v):
+        return bool(v) if v is not None else False
+
+    @field_validator("telegram_notify_on_complete", mode="before")
+    @classmethod
+    def set_telegram_notify_on_complete(cls, v):
+        return bool(v) if v is not None else True
+
+    @field_validator("telegram_notify_on_error", mode="before")
+    @classmethod
+    def set_telegram_notify_on_error(cls, v):
+        return bool(v) if v is not None else True
 
     model_config = ConfigDict(from_attributes=True)
 

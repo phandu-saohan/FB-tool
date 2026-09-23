@@ -75,6 +75,18 @@ def init_db():
     except Exception as mig_err:
         log_warning('DATABASE', f'Auto-migration check notice: {mig_err}')
 
+    # Backfill default values for newly added columns in existing rows
+    try:
+        with engine.connect() as conn:
+            conn.execute(text('UPDATE email_provider_settings SET telegram_alerts_enabled = 0 WHERE telegram_alerts_enabled IS NULL'))
+            conn.execute(text('UPDATE email_provider_settings SET telegram_notify_on_complete = 1 WHERE telegram_notify_on_complete IS NULL'))
+            conn.execute(text('UPDATE email_provider_settings SET telegram_notify_on_error = 1 WHERE telegram_notify_on_error IS NULL'))
+            conn.execute(text('UPDATE email_campaign_recipients SET open_count = 0 WHERE open_count IS NULL'))
+            conn.execute(text('UPDATE email_campaign_recipients SET click_count = 0 WHERE click_count IS NULL'))
+            conn.commit()
+    except Exception as bf_err:
+        log_warning('DATABASE', f'Backfill notice: {bf_err}')
+
     # 3. Seed default email account if none exists
     try:
         from app.database.models import EmailProviderSetting
