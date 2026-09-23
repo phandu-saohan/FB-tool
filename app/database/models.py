@@ -312,8 +312,16 @@ class EmailCampaignRecipient(Base):
     error_message = Column(Text, nullable=True)
     idempotency_key = Column(String(255), nullable=True, index=True)
 
+    opened_at = Column(DateTime, nullable=True, index=True)
+    open_count = Column(Integer, default=0)
+    clicked_at = Column(DateTime, nullable=True, index=True)
+    click_count = Column(Integer, default=0)
+    device_type = Column(String(50), nullable=True)
+    last_ip = Column(String(50), nullable=True)
+
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
     campaign = relationship('EmailCampaign', back_populates='recipients')
     job = relationship('EmailJob', back_populates='recipient', uselist=False, cascade='all, delete-orphan')
@@ -412,7 +420,18 @@ class EmailProviderSetting(Base):
     pause_reason = Column(Text, nullable=True)
     cooldown_until = Column(DateTime, nullable=True)
 
+    # Telegram Notification Bot Settings
+    telegram_bot_token = Column(String(255), nullable=True)
+    telegram_chat_id = Column(String(100), nullable=True)
+    telegram_alerts_enabled = Column(Boolean, default=False)
+    telegram_notify_on_complete = Column(Boolean, default=True)
+    telegram_notify_on_error = Column(Boolean, default=True)
+
+    # Email Tracking Base URL
+    tracking_base_url = Column(String(255), nullable=True)
+
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
 
 class EmailAuditLog(Base):
     __tablename__ = 'email_audit_logs'

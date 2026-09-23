@@ -31,7 +31,13 @@ import {
   MessageSquare,
   Download,
   Sparkles,
-  Info
+  Info,
+  Eye,
+  MousePointerClick,
+  Bot,
+  SendHorizontal,
+  MessageCircle,
+  ExternalLink
 } from 'lucide-react';
 import {
   getEmailDashboard,
@@ -64,7 +70,10 @@ import {
   testEmailAccountConnection,
   testDraftEmailAccountConnection,
   resetEmailAccountCircuitBreaker,
-  exportCampaignZaloOA
+  exportCampaignZaloOA,
+  generateAIEmail,
+  testTelegramBot,
+  updateTelegramSettings
 } from '../api';
 
 import Pagination, { usePagination } from '../components/Pagination';
@@ -134,6 +143,29 @@ export default function EmailView() {
   const [showExcelModal, setShowExcelModal] = useState(false);
   const [selectedCampaignForExcel, setSelectedCampaignForExcel] = useState(null);
 
+  // AI Content Studio (Gemini 2.5) States
+  const [showAIModal, setShowAIModal] = useState(false);
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [aiForm, setAiForm] = useState({
+    topic: 'Hội nghị Thẩm mỹ Quốc tế 2026 - Thư Mời VIP',
+    audience: 'Bác sĩ Da Liễu, Dược sĩ & Chủ Spa',
+    tone: 'Chuyên nghiệp, sang trọng, thu hút',
+    cta_text: 'Đăng Ký Tham Dự Ngay',
+    cta_url: 'https://aesthetichub.vn/register',
+    key_points: 'Xu hướng thẩm mỹ mới nhất 2026, cơ hội kết nối với 50+ chuyên gia đầu ngành, ưu đãi vé VIP cho 100 đăng ký đầu tiên'
+  });
+  const [aiResult, setAiResult] = useState(null);
+
+  // Telegram Notification Bot States
+  const [telegramForm, setTelegramForm] = useState({
+    telegram_bot_token: '',
+    telegram_chat_id: '',
+    telegram_alerts_enabled: false,
+    telegram_notify_on_complete: true,
+    telegram_notify_on_error: true
+  });
+  const [isTestingTelegram, setIsTestingTelegram] = useState(false);
+  const [isSavingTelegram, setIsSavingTelegram] = useState(false);
 
   // Form states
   const [newCampaign, setNewCampaign] = useState({
@@ -185,6 +217,16 @@ export default function EmailView() {
       setSettings(settRes.data);
       setAuditLogs(logsRes.data);
       setAccounts(accRes.data || []);
+
+      if (settRes.data) {
+        setTelegramForm({
+          telegram_bot_token: settRes.data.telegram_bot_token || '',
+          telegram_chat_id: settRes.data.telegram_chat_id || '',
+          telegram_alerts_enabled: settRes.data.telegram_alerts_enabled || false,
+          telegram_notify_on_complete: settRes.data.telegram_notify_on_complete !== false,
+          telegram_notify_on_error: settRes.data.telegram_notify_on_error !== false
+        });
+      }
     } catch (err) {
       console.error('Failed to load email data:', err);
       showNotification('Không thể tải dữ liệu email: ' + (err.response?.data?.detail || err.message), true);
@@ -211,6 +253,72 @@ export default function EmailView() {
       loadQueue();
     }
   }, [activeSubTab]);
+
+  // AI Content Studio Handlers
+  const handleGenerateAIEmail = async (e) => {
+    if (e) e.preventDefault();
+    if (!aiForm.topic.trim()) {
+      showNotification('Vui lòng nhập chủ đề chiến dịch.', true);
+      return;
+    }
+    setIsGeneratingAI(true);
+    setAiResult(null);
+    try {
+      const res = await generateAIEmail(aiForm);
+      setAiResult(res.data);
+      showNotification('✨ AI Gemini đã soạn xong nội dung email thành công!');
+    } catch (err) {
+      showNotification('Lỗi tạo nội dung AI: ' + (err.response?.data?.detail || err.message), true);
+    } finally {
+      setIsGeneratingAI(false);
+    }
+  };
+
+  const handleApplyAIContent = (subjectVariant = null) => {
+    if (!aiResult) return;
+    setNewCampaign(prev => ({
+      ...prev,
+      subject: subjectVariant || (aiResult.subject_variants?.[0] || prev.subject),
+      preview_text: aiResult.preview_text || prev.preview_text,
+      content_html: aiResult.content_html || prev.content_html,
+      content_plain: aiResult.content_plain || prev.content_plain,
+      cta_text: aiForm.cta_text || prev.cta_text,
+      cta_url: aiForm.cta_url || prev.cta_url
+    }));
+    setShowAIModal(false);
+    showNotification('Đã áp dụng mẫu email do AI tạo vào chiến dịch!');
+  };
+
+  // Telegram Settings Handlers
+  const handleTestTelegram = async () => {
+    if (!telegramForm.telegram_bot_token || !telegramForm.telegram_chat_id) {
+      showNotification('Vui lòng nhập Telegram Bot Token và Chat ID trước khi gửi thử.', true);
+      return;
+    }
+    setIsTestingTelegram(true);
+    try {
+      const res = await testTelegramBot(telegramForm);
+      showNotification(res.data.message || 'Đã gửi tin nhắn thử nghiệm tới Telegram!');
+    } catch (err) {
+      showNotification('Lỗi kết nối Telegram: ' + (err.response?.data?.detail || err.message), true);
+    } finally {
+      setIsTestingTelegram(false);
+    }
+  };
+
+  const handleSaveTelegramSettings = async (e) => {
+    if (e) e.preventDefault();
+    setIsSavingTelegram(true);
+    try {
+      const res = await updateTelegramSettings(telegramForm);
+      setSettings(res.data);
+      showNotification('Đã lưu cấu hình thông báo Telegram Bot thành công!');
+    } catch (err) {
+      showNotification('Lỗi lưu cấu hình: ' + (err.response?.data?.detail || err.message), true);
+    } finally {
+      setIsSavingTelegram(false);
+    }
+  };
 
   // Campaign handlers
   const handleCreateCampaign = async (e) => {
@@ -935,7 +1043,7 @@ export default function EmailView() {
                         <p className="text-xs text-slate-500 mt-1">Tiêu đề: {camp.subject}</p>
 
                         {/* Progress */}
-                        <div className="mt-3 flex items-center gap-3">
+                        <div className="mt-3 flex items-center gap-3 flex-wrap">
                           <div className="w-48 bg-slate-200 rounded-full h-2">
                             <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${progressPct}%` }}></div>
                           </div>
@@ -944,9 +1052,21 @@ export default function EmailView() {
                           </span>
                           {camp.estimated_days_remaining !== null && camp.status === 'RUNNING' && (
                             <span className="text-xs text-blue-600 font-medium">
-                              (Dự kiến hoàn thành: ~{camp.estimated_days_remaining} ngày)
+                              (Dự kiến: ~{camp.estimated_days_remaining} ngày)
                             </span>
                           )}
+
+                          {/* Open Rate & Click Rate Badges */}
+                          <div className="flex items-center gap-2 text-xs ml-auto">
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200 font-semibold" title="Tỷ lệ mở email">
+                              <Eye className="w-3 h-3 text-emerald-600" />
+                              Mở: {camp.open_rate || 0}% ({camp.opened_count || 0})
+                            </span>
+                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-sky-50 text-sky-700 border border-sky-200 font-semibold" title="Tỷ lệ bấm liên kết">
+                              <MousePointerClick className="w-3 h-3 text-sky-600" />
+                              Click: {camp.click_rate || 0}% ({camp.clicked_count || 0})
+                            </span>
+                          </div>
                         </div>
                       </div>
 
@@ -990,7 +1110,6 @@ export default function EmailView() {
                         >
                           <Users className="w-3.5 h-3.5" /> Chi tiết
                         </button>
-
                       </div>
                     </div>
                   );
@@ -1025,6 +1144,8 @@ export default function EmailView() {
                   <th className="p-3">Tên Chiến dịch</th>
                   <th className="p-3">Trạng thái</th>
                   <th className="p-3">Tiến độ gửi</th>
+                  <th className="p-3">Tỷ lệ Mở (Open)</th>
+                  <th className="p-3">Tỷ lệ Click (CTR)</th>
                   <th className="p-3">Còn lại</th>
                   <th className="p-3">Ước tính</th>
                   <th className="p-3 text-right">Thao tác</th>
@@ -1033,7 +1154,7 @@ export default function EmailView() {
               <tbody className="divide-y divide-slate-100">
                 {paginatedCampaigns.totalItems === 0 ? (
                   <tr>
-                    <td colSpan="7" className="text-center py-8 text-slate-400">
+                    <td colSpan="9" className="text-center py-8 text-slate-400">
                       Chưa có chiến dịch nào. Hãy tạo chiến dịch mới.
                     </td>
                   </tr>
@@ -1061,6 +1182,24 @@ export default function EmailView() {
                             className="bg-blue-600 h-1.5 rounded-full"
                             style={{ width: `${c.total_recipients > 0 ? (c.sent_count / c.total_recipients) * 100 : 0}%` }}
                           ></div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1 font-bold text-emerald-700">
+                          <Eye className="w-3.5 h-3.5 text-emerald-600" />
+                          {c.open_rate || 0}%
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {c.opened_count || 0} lượt mở
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="flex items-center gap-1 font-bold text-sky-700">
+                          <MousePointerClick className="w-3.5 h-3.5 text-sky-600" />
+                          {c.click_rate || 0}%
+                        </div>
+                        <div className="text-[10px] text-slate-400 font-medium">
+                          {c.clicked_count || 0} click
                         </div>
                       </td>
                       <td className="p-3 font-bold text-slate-700">{c.remaining_count}</td>
@@ -1652,6 +1791,125 @@ export default function EmailView() {
               darkMode={false}
             />
           </div>
+
+          {/* Telegram Bot Real-time Alerts 24/7 Configuration Card */}
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-sky-50 text-sky-600 rounded-xl">
+                  <Bot className="w-6 h-6" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                    Thông Báo Real-time Qua Telegram Bot (24/7)
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-700">
+                      Dokploy VPS
+                    </span>
+                  </h4>
+                  <p className="text-xs text-slate-500">
+                    Nhận thông báo ngay lập tức vào điện thoại khi chiến dịch gửi xong (kèm Open Rate & Click CTR), hoặc khi máy chủ chạm rate-limit hạ nhiệt.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  disabled={isTestingTelegram || !telegramForm.telegram_bot_token || !telegramForm.telegram_chat_id}
+                  onClick={handleTestTelegram}
+                  className="px-3.5 py-2 bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 rounded-lg text-xs font-bold transition flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isTestingTelegram ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Đang gửi thử...
+                    </>
+                  ) : (
+                    <>
+                      <SendHorizontal className="w-3.5 h-3.5" />
+                      Gửi tin nhắn thử nghiệm
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  disabled={isSavingTelegram}
+                  onClick={handleSaveTelegramSettings}
+                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold transition shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <CheckCircle className="w-3.5 h-3.5" />
+                  {isSavingTelegram ? 'Đang lưu...' : 'Lưu cấu hình'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Telegram Bot Token *
+                </label>
+                <input
+                  type="password"
+                  value={telegramForm.telegram_bot_token || ''}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, telegram_bot_token: e.target.value })}
+                  placeholder="Ví dụ: 789123456:AAFlkjasdf98723..."
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-mono"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Lấy token từ <a href="https://t.me/BotFather" target="_blank" rel="noreferrer" className="text-blue-600 underline">@BotFather</a> trên Telegram.
+                </span>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700 block mb-1">
+                  Telegram Chat ID / Group ID *
+                </label>
+                <input
+                  type="text"
+                  value={telegramForm.telegram_chat_id || ''}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, telegram_chat_id: e.target.value })}
+                  placeholder="Ví dụ: 123456789 hoặc -1001234567890"
+                  className="w-full p-2.5 border border-slate-300 rounded-lg text-xs font-mono"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">
+                  Chat ID cá nhân hoặc ID nhóm (Lấy từ bot <a href="https://t.me/userinfobot" target="_blank" rel="noreferrer" className="text-blue-600 underline">@userinfobot</a>).
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex flex-wrap gap-4 text-xs font-medium text-slate-700">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={telegramForm.telegram_alerts_enabled}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, telegram_alerts_enabled: e.target.checked })}
+                  className="rounded text-blue-600 w-4 h-4"
+                />
+                <span>Bật gửi thông báo Telegram Bot</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={telegramForm.telegram_notify_on_complete}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, telegram_notify_on_complete: e.target.checked })}
+                  className="rounded text-blue-600 w-4 h-4"
+                />
+                <span>Báo cáo khi chiến dịch hoàn tất (Kèm Open Rate & Click Rate)</span>
+              </label>
+
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={telegramForm.telegram_notify_on_error}
+                  onChange={(e) => setTelegramForm({ ...telegramForm, telegram_notify_on_error: e.target.checked })}
+                  className="rounded text-blue-600 w-4 h-4"
+                />
+                <span>Báo động khi chạm Rate Limit hạ nhiệt hoặc Circuit Breaker</span>
+              </label>
+            </div>
+          </div>
         </div>
       )}
 
@@ -2134,6 +2392,32 @@ export default function EmailView() {
               </button>
             </div>
 
+            {/* AI Assistant Banner */}
+            <div className="flex items-center justify-between p-3.5 bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 border border-blue-200 rounded-xl">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-blue-600 text-white rounded-lg shadow-sm">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <span className="font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                    Trợ Lý AI Content Studio (Gemini 2.5)
+                    <span className="px-1.5 py-0.2 rounded bg-purple-100 text-purple-700 font-bold text-[10px]">Tự động</span>
+                  </span>
+                  <span className="text-[11px] text-slate-500">
+                    Tự động tạo 3 tiêu đề giật tít, viết thư mời sang trọng chuẩn y khoa & nút kêu gọi hành động chuyển đổi cao.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAIModal(true)}
+                className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition shrink-0"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                Soạn Bằng AI
+              </button>
+            </div>
+
             <form onSubmit={handleCreateCampaign} className="space-y-4">
               <div>
                 <label className="text-xs font-semibold text-slate-700">Tên chiến dịch *</label>
@@ -2241,6 +2525,182 @@ export default function EmailView() {
         </div>
       )}
 
+      {/* MODAL: AI CONTENT STUDIO (GEMINI 2.5) */}
+      {showAIModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl max-w-3xl w-full max-h-[90vh] overflow-y-auto p-6 space-y-4 border border-purple-100">
+            <div className="flex justify-between items-center border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 bg-gradient-to-tr from-purple-600 to-blue-600 text-white rounded-xl shadow-sm">
+                  <Sparkles className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800 text-base flex items-center gap-2">
+                    Trợ Lý AI Gemini — Soạn Email Tự Động
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">
+                      Gemini 2.5
+                    </span>
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Nhập ý tưởng hoặc thông tin sự kiện để AI viết trọn gói tiêu đề, preview text và HTML thư mời cao cấp
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowAIModal(false)} className="text-slate-400 hover:text-slate-600">
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleGenerateAIEmail} className="space-y-3">
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Chủ đề chiến dịch / Tên sự kiện *</label>
+                <input
+                  type="text"
+                  required
+                  value={aiForm.topic}
+                  onChange={(e) => setAiForm({ ...aiForm, topic: e.target.value })}
+                  placeholder="VD: Hội nghị Da Liễu Thẩm Mỹ 2026 hoặc Khóa Đào Tạo Laser Chuyên Sâu"
+                  className="w-full mt-1 p-2.5 border border-slate-300 rounded-xl text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Đối tượng nhận thư</label>
+                  <input
+                    type="text"
+                    value={aiForm.audience}
+                    onChange={(e) => setAiForm({ ...aiForm, audience: e.target.value })}
+                    placeholder="VD: Bác sĩ, Dược sĩ, Chủ Spa / Thẩm mỹ viện"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Giọng văn (Tone)</label>
+                  <select
+                    value={aiForm.tone}
+                    onChange={(e) => setAiForm({ ...aiForm, tone: e.target.value })}
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                  >
+                    <option value="Chuyên nghiệp, sang trọng, thu hút">Chuyên nghiệp, sang trọng (Hội nghị y khoa)</option>
+                    <option value="Thân mật, tôn trọng, chân thành">Thân mật, chân thành (Chăm sóc khách hàng)</option>
+                    <option value="Khẩn trương, hào hứng, kích thích">Khẩn trương, khan hiếm (Vé VIP số lượng có hạn)</option>
+                    <option value="Khoa học, chuẩn mực, uy tín">Học thuật, chuẩn mực (Tọa đàm chuyên gia)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Nút kêu gọi (CTA Text)</label>
+                  <input
+                    type="text"
+                    value={aiForm.cta_text}
+                    onChange={(e) => setAiForm({ ...aiForm, cta_text: e.target.value })}
+                    placeholder="VD: Đăng Ký Giữ Chỗ VIP"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-slate-700">Đường dẫn đích (CTA URL)</label>
+                  <input
+                    type="url"
+                    value={aiForm.cta_url}
+                    onChange={(e) => setAiForm({ ...aiForm, cta_url: e.target.value })}
+                    placeholder="https://aesthetichub.vn/register"
+                    className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-semibold text-slate-700">Ý chính & Quyền lợi nổi bật</label>
+                <textarea
+                  rows="2"
+                  value={aiForm.key_points}
+                  onChange={(e) => setAiForm({ ...aiForm, key_points: e.target.value })}
+                  placeholder="Gạch đầu dòng quyền lợi: Giảng viên quốc tế, cấp chứng chỉ CME, tặng bộ tài liệu độc quyền..."
+                  className="w-full mt-1 p-2 border border-slate-300 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  type="submit"
+                  disabled={isGeneratingAI}
+                  className="px-5 py-2.5 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white rounded-xl text-xs font-bold transition shadow-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  {isGeneratingAI ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      AI Gemini đang sáng tạo nội dung...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Tạo Nội Dung Bằng AI Ngay
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+
+            {/* AI Results Preview */}
+            {aiResult && (
+              <div className="mt-4 pt-4 border-t border-slate-200 space-y-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1.5 flex items-center gap-1.5">
+                    🎯 Gợi Ý 3 Tiêu Đề Email (Bấm vào tiêu đề bạn thích để áp dụng):
+                  </label>
+                  <div className="space-y-2">
+                    {aiResult.subject_variants?.map((sub, idx) => (
+                      <div
+                        key={idx}
+                        onClick={() => handleApplyAIContent(sub)}
+                        className="p-2.5 rounded-xl border border-slate-200 hover:border-purple-400 hover:bg-purple-50/50 cursor-pointer transition flex items-center justify-between group"
+                      >
+                        <span className="text-xs font-semibold text-slate-800 group-hover:text-purple-700">
+                          {idx + 1}. {sub}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded bg-purple-100 text-purple-700 font-bold opacity-0 group-hover:opacity-100 transition">
+                          Chọn tiêu đề này ↗
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {aiResult.preview_text && (
+                  <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-lg text-xs">
+                    <span className="font-semibold text-slate-700">Đoạn xem trước (Preview text): </span>
+                    <span className="text-slate-600 italic">{aiResult.preview_text}</span>
+                  </div>
+                )}
+
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="text-xs font-bold text-slate-800">
+                      Xem trước mẫu Email HTML do AI tạo:
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyAIContent()}
+                      className="px-3 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold transition shadow-xs"
+                    >
+                      ✅ Áp dụng tất cả vào chiến dịch
+                    </button>
+                  </div>
+                  <div
+                    className="p-4 border border-slate-200 rounded-xl bg-slate-50 max-h-60 overflow-y-auto text-xs"
+                    dangerouslySetInnerHTML={{ __html: aiResult.content_html }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* MODAL: IMPORT RECIPIENTS */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -2337,6 +2797,8 @@ export default function EmailView() {
                     <th className="p-2.5">Họ tên</th>
                     <th className="p-2.5">Số ĐT (Zalo OA)</th>
                     <th className="p-2.5">Trạng thái</th>
+                    <th className="p-2.5">Mở thư (Opens)</th>
+                    <th className="p-2.5">Click link (CTR)</th>
                     <th className="p-2.5">Số lần gửi</th>
                     <th className="p-2.5">Thời gian gửi</th>
                     <th className="p-2.5">Chi tiết</th>
@@ -2345,7 +2807,7 @@ export default function EmailView() {
                 <tbody className="divide-y divide-slate-100">
                   {paginatedRecipients.totalItems === 0 ? (
                     <tr>
-                      <td colSpan="7" className="text-center py-6 text-slate-400">
+                      <td colSpan="9" className="text-center py-6 text-slate-400">
                         Chưa có người nhận nào trong chiến dịch này. Hãy nạp danh sách qua Excel hoặc Text.
                       </td>
                     </tr>
@@ -2375,6 +2837,29 @@ export default function EmailView() {
                           }`}>
                             {r.status}
                           </span>
+                        </td>
+                        <td className="p-2.5">
+                          {r.open_count > 0 ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold text-[10px] bg-emerald-100 text-emerald-800">
+                                <Eye className="w-2.5 h-2.5 text-emerald-600" />
+                                {r.open_count} lần
+                              </span>
+                              <div className="text-[9px] text-slate-400 mt-0.5">{r.device_type || 'Desktop'}</div>
+                            </div>
+                          ) : (
+                            <span className="text-slate-300 italic text-[11px]">Chưa mở</span>
+                          )}
+                        </td>
+                        <td className="p-2.5">
+                          {r.click_count > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded font-bold text-[10px] bg-sky-100 text-sky-800">
+                              <MousePointerClick className="w-2.5 h-2.5 text-sky-600" />
+                              {r.click_count} click
+                            </span>
+                          ) : (
+                            <span className="text-slate-300 italic text-[11px]">-</span>
+                          )}
                         </td>
                         <td className="p-2.5 font-semibold">{r.attempt_count}</td>
                         <td className="p-2.5 text-slate-400 text-[11px]">

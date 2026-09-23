@@ -125,5 +125,10 @@ export const testDraftEmailAccountConnection = (data) => api.post('/email/accoun
 export const resetEmailAccountCircuitBreaker = (id) => api.post(`/email/accounts/${id}/reset-circuit-breaker`);
 export const resetEmailAccountCooldown = (id) => api.post(`/email/accounts/${id}/reset-cooldown`);
 
+// AI Content Studio & Telegram Bot Alerts
+export const generateAIEmail = (data) => api.post('/email/ai/generate', data);
+export const testTelegramBot = (data) => api.post('/email/telegram/test', data);
+export const updateTelegramSettings = (data) => api.put('/email/telegram/settings', data);
 
 export default api;
+

@@ -52,6 +52,10 @@ class CampaignResponse(BaseModel):
     failed_count: int
     skipped_count: int
     remaining_count: int
+    opened_count: int = 0
+    clicked_count: int = 0
+    open_rate: float = 0.0
+    click_rate: float = 0.0
     content_html: Optional[str] = None
     content_plain: Optional[str] = None
     preview_text: Optional[str] = None
@@ -66,6 +70,7 @@ class CampaignResponse(BaseModel):
     estimated_days_remaining: Optional[float] = None
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class RecipientCreate(BaseModel):
     email: str
@@ -99,9 +104,15 @@ class RecipientResponse(BaseModel):
     provider_message_id: Optional[str] = None
     error_code: Optional[str] = None
     error_message: Optional[str] = None
+    opened_at: Optional[datetime] = None
+    open_count: int = 0
+    clicked_at: Optional[datetime] = None
+    click_count: int = 0
+    device_type: Optional[str] = None
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
 
 
 class QueueItemResponse(BaseModel):
@@ -159,6 +170,12 @@ class ProviderSettingUpdate(BaseModel):
     max_emails_per_contact_30d: Optional[int] = None
     circuit_breaker_failures: Optional[int] = None
     circuit_breaker_rate: Optional[float] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_alerts_enabled: Optional[bool] = None
+    telegram_notify_on_complete: Optional[bool] = None
+    telegram_notify_on_error: Optional[bool] = None
+    tracking_base_url: Optional[str] = None
 
 class ProviderSettingResponse(BaseModel):
     id: int
@@ -191,8 +208,36 @@ class ProviderSettingResponse(BaseModel):
     is_paused: bool
     pause_reason: Optional[str] = None
     cooldown_until: Optional[datetime] = None
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_alerts_enabled: bool = False
+    telegram_notify_on_complete: bool = True
+    telegram_notify_on_error: bool = True
+    tracking_base_url: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True)
+
+class TelegramSettingUpdate(BaseModel):
+    telegram_bot_token: Optional[str] = None
+    telegram_chat_id: Optional[str] = None
+    telegram_alerts_enabled: bool = True
+    telegram_notify_on_complete: bool = True
+    telegram_notify_on_error: bool = True
+
+class AIEmailGenerateRequest(BaseModel):
+    topic: str
+    audience: Optional[str] = "Bác sĩ, Dược sĩ & Chủ Spa"
+    tone: Optional[str] = "Chuyên nghiệp, sang trọng, thu hút"
+    cta_text: Optional[str] = "Đăng Ký Tham Dự Ngay"
+    cta_url: Optional[str] = "https://aesthetichub.vn/register"
+    key_points: Optional[str] = None
+
+class AIEmailGenerateResponse(BaseModel):
+    subject_variants: List[str]
+    preview_text: str
+    content_html: str
+    content_plain: str
+
 
 class EmailAccountCreate(BaseModel):
     name: str = "Hostinger Outreach"

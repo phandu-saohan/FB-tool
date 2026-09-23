@@ -1,7 +1,7 @@
 from datetime import datetime
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File, Response
-from fastapi.responses import StreamingResponse
+from typing import List, Optional, Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, UploadFile, File, Response, Request
+from fastapi.responses import StreamingResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 
@@ -29,7 +29,10 @@ from app.schemas.email_schemas import (
     EmailAccountUpdate,
     EmailAccountResponse,
     EmailDashboardStats,
-    ExcelImportResult
+    ExcelImportResult,
+    TelegramSettingUpdate,
+    AIEmailGenerateRequest,
+    AIEmailGenerateResponse
 )
 from app.services.email.quota_manager import EmailQuotaManager
 from app.services.email.circuit_breaker import EmailCircuitBreaker
@@ -39,6 +42,36 @@ from app.services.email.worker import EmailWorker
 from app.services.email.providers.hostinger_smtp_provider import HostingerSMTPProvider
 from app.services.email.providers.mock_email_provider import MockEmailProvider
 from app.services.email.excel_service import ExcelContactService
+from app.services.email.tracking_service import EmailTrackingService
+from app.services.telegram_service import TelegramService
+from app.services.email.ai_service import EmailAIService
+
+
+def _format_campaign_response(c: EmailCampaign, eff_limit: int, db: Session) -> CampaignResponse:
+    cr = CampaignResponse.model_validate(c)
+    if c.remaining_count > 0 and eff_limit > 0:
+        cr.estimated_days_remaining = round(c.remaining_count / eff_limit, 1)
+
+    # Compute live open rate and click rate
+    opened_count = db.query(EmailCampaignRecipient).filter(
+        EmailCampaignRecipient.campaign_id == c.id,
+        EmailCampaignRecipient.open_count > 0
+    ).count()
+    clicked_count = db.query(EmailCampaignRecipient).filter(
+        EmailCampaignRecipient.campaign_id == c.id,
+        EmailCampaignRecipient.click_count > 0
+    ).count()
+
+    cr.opened_count = opened_count
+    cr.clicked_count = clicked_count
+    sent = c.sent_count or 0
+    if sent > 0:
+        cr.open_rate = round((opened_count / sent) * 100, 1)
+        cr.click_rate = round((clicked_count / sent) * 100, 1)
+    else:
+        cr.open_rate = 0.0
+        cr.click_rate = 0.0
+    return cr
 
 
 router = APIRouter(prefix="/api/email", tags=["Email Campaign Queue & Sending"])
@@ -84,9 +117,7 @@ def get_email_dashboard(db: Session = Depends(get_db)):
         effective_limit = aggregate_quota.get("effective_limit", 300)
         for c in active_camps:
             try:
-                c_dict = CampaignResponse.model_validate(c)
-                if c.status == "RUNNING" and c.remaining_count > 0 and effective_limit > 0:
-                    c_dict.estimated_days_remaining = round(c.remaining_count / effective_limit, 1)
+                c_dict = _format_campaign_response(c, effective_limit, db)
                 camp_responses.append(c_dict)
             except Exception:
                 pass
@@ -165,9 +196,7 @@ def list_campaigns(db: Session = Depends(get_db)):
 
     res = []
     for c in campaigns:
-        cr = CampaignResponse.model_validate(c)
-        if c.remaining_count > 0 and eff_limit > 0:
-            cr.estimated_days_remaining = round(c.remaining_count / eff_limit, 1)
+        cr = _format_campaign_response(c, eff_limit, db)
         res.append(cr)
     return res
 
@@ -205,10 +234,7 @@ def get_campaign(campaign_id: int, db: Session = Depends(get_db)):
     
     setting = db.query(EmailProviderSetting).first()
     eff_limit = EmailQuotaManager.get_effective_limit(setting.daily_limit if setting else 300, setting.safety_margin_pct if setting else 10.0)
-    cr = CampaignResponse.model_validate(campaign)
-    if campaign.remaining_count > 0 and eff_limit > 0:
-        cr.estimated_days_remaining = round(campaign.remaining_count / eff_limit, 1)
-    return cr
+    return _format_campaign_response(campaign, eff_limit, db)
 
 @router.put("/campaigns/{campaign_id}", response_model=CampaignResponse)
 def update_campaign(campaign_id: int, data: CampaignUpdate, db: Session = Depends(get_db)):
@@ -925,3 +951,143 @@ def get_audit_logs(limit: int = 50, db: Session = Depends(get_db)):
         }
         for l in logs
     ]
+
+# ---------------------------------------------------------------------------
+# EMAIL TRACKING (OPEN PIXEL & CLICK REDIRECT)
+# ---------------------------------------------------------------------------
+
+@router.get("/track/open/{recipient_id}.png")
+def track_email_open(recipient_id: int, request: Request, db: Session = Depends(get_db)):
+    """Serves 1x1 transparent PNG and records email open event"""
+    ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+    if ip and "," in ip:
+        ip = ip.split(",")[0].strip()
+    user_agent = request.headers.get("user-agent")
+
+    EmailTrackingService.record_open(db, recipient_id, ip=ip, user_agent=user_agent)
+
+    return Response(
+        content=EmailTrackingService.get_1px_png(),
+        media_type="image/png",
+        headers={
+            "Cache-Control": "no-cache, no-store, must-revalidate, max-age=0",
+            "Pragma": "no-cache",
+            "Expires": "0"
+        }
+    )
+
+@router.get("/track/click/{recipient_id}")
+def track_email_click(
+    recipient_id: int,
+    url: str = Query(..., description="Target destination URL"),
+    request: Request = None,
+    db: Session = Depends(get_db)
+):
+    """Records link click and redirects to destination URL"""
+    ip = None
+    user_agent = None
+    if request:
+        ip = request.headers.get("x-forwarded-for") or (request.client.host if request.client else None)
+        if ip and "," in ip:
+            ip = ip.split(",")[0].strip()
+        user_agent = request.headers.get("user-agent")
+
+    dest_url = EmailTrackingService.record_click(db, recipient_id, target_url=url, ip=ip, user_agent=user_agent)
+    return RedirectResponse(url=dest_url, status_code=302)
+
+# ---------------------------------------------------------------------------
+# AI CONTENT STUDIO (GEMINI 2.5)
+# ---------------------------------------------------------------------------
+
+@router.post("/ai/generate", response_model=AIEmailGenerateResponse)
+async def generate_ai_email_content(
+    data: AIEmailGenerateRequest,
+    db: Session = Depends(get_db)
+):
+    """Generates high-converting email subject lines, preview text, and HTML body using Gemini"""
+    result = await EmailAIService.generate_campaign(
+        topic=data.topic,
+        audience=data.audience or "Bác sĩ, Dược sĩ & Chủ Spa",
+        tone=data.tone or "Chuyên nghiệp, sang trọng, thu hút",
+        cta_text=data.cta_text or "Đăng Ký Tham Dự Ngay",
+        cta_url=data.cta_url or "https://aesthetichub.vn/register",
+        key_points=data.key_points
+    )
+    return AIEmailGenerateResponse(
+        subject_variants=result.get("subject_variants", []),
+        preview_text=result.get("preview_text", ""),
+        content_html=result.get("content_html", ""),
+        content_plain=result.get("content_plain", "")
+    )
+
+# ---------------------------------------------------------------------------
+# TELEGRAM BOT ALERTS & CONFIGURATION
+# ---------------------------------------------------------------------------
+
+@router.post("/telegram/test")
+async def test_telegram_bot(
+    data: Optional[Dict[str, Any]] = None,
+    db: Session = Depends(get_db)
+):
+    """Tests Telegram Bot connectivity by sending a verification message"""
+    setting = db.query(EmailProviderSetting).first()
+    bot_token = None
+    chat_id = None
+
+    if data:
+        bot_token = data.get("bot_token") or data.get("telegram_bot_token")
+        chat_id = data.get("chat_id") or data.get("telegram_chat_id")
+
+    if not bot_token and setting:
+        bot_token = setting.telegram_bot_token
+    if not chat_id and setting:
+        chat_id = setting.telegram_chat_id
+
+    if not bot_token or not chat_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Vui lòng cung cấp đầy đủ Telegram Bot Token và Chat ID để kiểm tra."
+        )
+
+    test_msg = (
+        "🎉 <b>[KẾT NỐI TELEGRAM BOT THÀNH CÔNG]</b>\n\n"
+        "Hệ thống FB-Tool & Email Marketing đã liên kết thành công với Telegram của bạn!\n\n"
+        "📡 <b>Trạng thái:</b> Sẵn sàng nhận thông báo real-time 24/7 khi:\n"
+        "• Chiến dịch gửi email hoàn tất (kèm thống kê Tỷ lệ Mở & Click)\n"
+        "• Hệ thống tạm nghỉ hạ nhiệt khi chạm Rate Limit Hostinger / Gmail\n"
+        "• Circuit Breaker kích hoạt bảo vệ uy tín gửi thư\n\n"
+        "🚀 <i>Dokploy VPS Production Node</i>"
+    )
+
+    success = await TelegramService.send_message(bot_token, chat_id, test_msg)
+    if success:
+        return {
+            "success": True,
+            "message": "Đã gửi tin nhắn thử nghiệm thành công tới Telegram! Hãy kiểm tra ứng dụng Telegram của bạn."
+        }
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail="Không thể gửi tin nhắn tới Telegram. Vui lòng kiểm tra lại Bot Token (chính xác từng ký tự) và Chat ID (đảm bảo bạn đã bấm /start với bot trước đó)."
+        )
+
+@router.put("/telegram/settings", response_model=ProviderSettingResponse)
+def update_telegram_settings(
+    data: TelegramSettingUpdate,
+    db: Session = Depends(get_db)
+):
+    """Updates Telegram notification configuration"""
+    setting = db.query(EmailProviderSetting).first()
+    if not setting:
+        setting = EmailProviderSetting()
+        db.add(setting)
+
+    update_dict = data.model_dump(exclude_unset=True)
+    for k, v in update_dict.items():
+        setattr(setting, k, v)
+
+    db.commit()
+    db.refresh(setting)
+    EmailAuditLogger.log(db, action="UPDATE_TELEGRAM_SETTINGS", metadata=update_dict)
+    return ProviderSettingResponse.model_validate(setting)
+

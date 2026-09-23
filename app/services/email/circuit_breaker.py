@@ -51,6 +51,29 @@ class EmailCircuitBreaker:
             )
             session.add(log)
 
+            # Telegram notification
+            try:
+                main_setting = session.query(EmailProviderSetting).first()
+                tg_token = setting.telegram_bot_token or (main_setting.telegram_bot_token if main_setting else None)
+                tg_chat = setting.telegram_chat_id or (main_setting.telegram_chat_id if main_setting else None)
+                tg_enabled = setting.telegram_alerts_enabled or (main_setting.telegram_alerts_enabled if main_setting else False)
+                tg_notify_err = setting.telegram_notify_on_error if setting.telegram_notify_on_error is not None else (main_setting.telegram_notify_on_error if main_setting else True)
+                if tg_enabled and tg_token and tg_chat and tg_notify_err:
+                    import asyncio
+                    from app.services.telegram_service import TelegramService
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(TelegramService.notify_circuit_breaker(
+                            bot_token=tg_token,
+                            chat_id=tg_chat,
+                            account_name=setting.name or provider,
+                            reason=reason
+                        ))
+                    except RuntimeError:
+                        pass
+            except Exception:
+                pass
+
         session.commit()
 
     @classmethod

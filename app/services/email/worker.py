@@ -13,6 +13,7 @@ from app.database.models import (
     EmailJob,
     EmailProviderSetting
 )
+from app.config import settings
 from app.services.email.providers.base_provider import EmailProvider
 from app.services.email.providers.hostinger_smtp_provider import HostingerSMTPProvider
 from app.services.email.providers.mock_email_provider import MockEmailProvider
@@ -21,6 +22,9 @@ from app.services.email.rate_limiter import EmailRateLimiter
 from app.services.email.circuit_breaker import EmailCircuitBreaker
 from app.services.email.suppression_service import EmailSuppressionService
 from app.services.email.audit_logger import EmailAuditLogger
+from app.services.email.tracking_service import EmailTrackingService
+from app.services.telegram_service import TelegramService
+
 
 logger = logging.getLogger("email_queue_worker")
 
@@ -304,6 +308,19 @@ class EmailWorker:
             utm_url = self.build_cta_with_utm(campaign.cta_url, campaign.name, recipient.id)
             body_html = body_html.replace(campaign.cta_url, utm_url)
 
+        # Inject Tracking Pixel & Click Tracking Redirector
+        tracking_base = (
+            selected_account.tracking_base_url or
+            getattr(settings, 'APP_BASE_URL', None) or
+            "http://app-hack-auxiliary-card-vcml69-b4fb7e-72-61-123-73.sslip.io"
+        )
+        if tracking_base and body_html:
+            body_html = EmailTrackingService.inject_tracking(
+                body_html,
+                base_url=tracking_base,
+                recipient_id=recipient.id
+            )
+
         # 5. Send Email via Selected Account
         from_email = selected_account.from_email or campaign.from_email
         from_name = selected_account.from_name or campaign.from_name
@@ -345,7 +362,44 @@ class EmailWorker:
                 campaign.status = 'COMPLETED'
                 campaign.completed_at = now_time
 
+                # Send Telegram alert if enabled
+                main_setting = session.query(EmailProviderSetting).first()
+                tg_enabled = (selected_account.telegram_alerts_enabled if selected_account else False) or (main_setting.telegram_alerts_enabled if main_setting else False)
+                tg_token = (selected_account.telegram_bot_token if selected_account and selected_account.telegram_bot_token else (main_setting.telegram_bot_token if main_setting else None))
+                tg_chat = (selected_account.telegram_chat_id if selected_account and selected_account.telegram_chat_id else (main_setting.telegram_chat_id if main_setting else None))
+                tg_notify_complete = (selected_account.telegram_notify_on_complete if selected_account and selected_account.telegram_notify_on_complete is not None else (main_setting.telegram_notify_on_complete if main_setting else True))
+                if tg_enabled and tg_token and tg_chat and tg_notify_complete:
+                    total_r = campaign.total_recipients or 0
+                    sent_r = campaign.sent_count or 0
+                    fail_r = campaign.failed_count or 0
+                    opened_r = session.query(EmailCampaignRecipient).filter(
+                        EmailCampaignRecipient.campaign_id == campaign.id,
+                        EmailCampaignRecipient.open_count > 0
+                    ).count()
+                    clicked_r = session.query(EmailCampaignRecipient).filter(
+                        EmailCampaignRecipient.campaign_id == campaign.id,
+                        EmailCampaignRecipient.click_count > 0
+                    ).count()
+                    open_pct = round((opened_r / sent_r * 100), 1) if sent_r > 0 else 0.0
+                    click_pct = round((clicked_r / sent_r * 100), 1) if sent_r > 0 else 0.0
+
+                    try:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(TelegramService.notify_campaign_completed(
+                            bot_token=tg_token,
+                            chat_id=tg_chat,
+                            campaign_name=campaign.name,
+                            total=total_r,
+                            sent=sent_r,
+                            failed=fail_r,
+                            open_rate=open_pct,
+                            click_rate=click_pct
+                        ))
+                    except RuntimeError:
+                        pass
+
             session.commit()
+
 
             # Jitter delay between emails
             if self.enable_delay:
@@ -427,6 +481,24 @@ class EmailWorker:
                     }
                 )
                 session.commit()
+
+                # Trigger Telegram notification for cooldown if enabled
+                try:
+                    main_setting = session.query(EmailProviderSetting).first()
+                    tg_enabled = (selected_account.telegram_alerts_enabled if selected_account else False) or (main_setting.telegram_alerts_enabled if main_setting else False)
+                    tg_token = (selected_account.telegram_bot_token if selected_account and selected_account.telegram_bot_token else (main_setting.telegram_bot_token if main_setting else None))
+                    tg_chat = (selected_account.telegram_chat_id if selected_account and selected_account.telegram_chat_id else (main_setting.telegram_chat_id if main_setting else None))
+                    tg_notify_err = (selected_account.telegram_notify_on_error if selected_account and selected_account.telegram_notify_on_error is not None else (main_setting.telegram_notify_on_error if main_setting else True))
+                    if tg_enabled and tg_token and tg_chat and tg_notify_err:
+                        loop = asyncio.get_running_loop()
+                        loop.create_task(TelegramService.notify_cooldown(
+                            bot_token=tg_token,
+                            chat_id=tg_chat,
+                            account_name=selected_account.name,
+                            cooldown_until=time_display
+                        ))
+                except Exception:
+                    pass
 
                 logger.warning(
                     f"[RATE_LIMIT_COOLDOWN] Account '{selected_account.name}' hit SMTP rate limit. "
