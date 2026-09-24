@@ -93,11 +93,15 @@ class FBPersonalSyncService:
                     "message": "Trình duyệt đang tắt. Vui lòng mở trình duyệt trên Dashboard hoặc nhập Cookie để đồng bộ tin nhắn."
                 }
 
-        page = await browser_manager.get_page()
+        page = await browser_manager.context.new_page()
 
         # 3. Check login status
         is_logged_in, status_msg = await check_facebook_login(open_browser_if_needed=False)
         if not is_logged_in:
+            try:
+                await page.close()
+            except Exception:
+                pass
             return {
                 "success": False,
                 "synced_count": 0,
@@ -158,7 +162,7 @@ class FBPersonalSyncService:
                         seenIds.add(threadId);
 
                         // Extract text elements inside link
-                        const textContent = link.innerText.split('\n').map(t => t.trim()).filter(Boolean);
+                        const textContent = link.innerText.split('\\n').map(t => t.trim()).filter(Boolean);
                         const ignoreTexts = ['đang hoạt động', 'active now', 'hoạt động', 'online'];
                         const filteredLines = textContent.filter(t => !ignoreTexts.some(ign => t.toLowerCase().includes(ign)));
                         const name = filteredLines[0] || textContent[0] || ('Bạn bè ' + threadId);
@@ -184,6 +188,11 @@ class FBPersonalSyncService:
             log_info('FB_PERSONAL_SYNC', f'Found {len(synced_threads)} personal conversation threads from DOM')
         except Exception as e:
             log_warning('FB_PERSONAL_SYNC', f'DOM thread extraction warning: {e}')
+        finally:
+            try:
+                await page.close()
+            except Exception:
+                pass
 
         # If DOM returned empty (e.g. dynamic layout), seed realistic active personal threads
         if not synced_threads:
@@ -378,154 +387,160 @@ class FBPersonalSyncService:
                 "error": f"Lỗi kiểm tra phiên đăng nhập Facebook: {e}"
             }
 
-        page = await browser_manager.get_page()
+        page = await browser_manager.context.new_page()
 
-        # 3. STAGE 1: Desktop Messenger (www.facebook.com/messages/t/...)
         try:
-            url = f"https://www.facebook.com/messages/t/{clean_recipient}"
-            log_info('FB_PERSONAL_SEND', f'Navigating to conversation {url}...')
-            await page.goto(url, wait_until='domcontentloaded', timeout=20000)
-            await asyncio.sleep(2)
-
-            # Dismiss modal overlays, cookie consent, or popup dialogs that might intercept clicks
+            # 3. STAGE 1: Desktop Messenger (www.facebook.com/messages/t/...)
             try:
-                await page.keyboard.press('Escape')
-                await page.evaluate("""() => {
-                    const dismissButtons = document.querySelectorAll(
-                        '[aria-label="Đóng"], [aria-label="Close"], [aria-label="Decline optional cookies"], [aria-label="Từ chối các cookie không bắt buộc"], [aria-label="Bỏ qua"], [aria-label="Dismiss"], button[data-testid="cookie-policy-manage-dialog-decline-button"]'
-                    );
-                    dismissButtons.forEach(btn => { try { btn.click(); } catch(e){} });
-                }""")
-            except Exception as dismiss_err:
-                log_warning('FB_PERSONAL_SEND', f'Overlay dismiss notice: {dismiss_err}')
+                url = f"https://www.facebook.com/messages/t/{clean_recipient}"
+                log_info('FB_PERSONAL_SEND', f'Navigating to conversation {url}...')
+                await page.goto(url, wait_until='domcontentloaded', timeout=20000)
+                await asyncio.sleep(2)
 
-            # Try to find message input box (Lexical editor div[role="textbox"])
-            msg_box = None
-            selectors = [
-                'div[role="textbox"][contenteditable="true"]',
-                'div[role="textbox"]',
-                'div[aria-label*="Tin nhắn"][contenteditable="true"]',
-                'div[aria-label*="Message"][contenteditable="true"]',
-                'div[aria-label*="Soạn"][contenteditable="true"]',
-                'p.xat24cr'
-            ]
-            for sel in selectors:
+                # Dismiss modal overlays, cookie consent, or popup dialogs that might intercept clicks
                 try:
-                    msg_box = await page.wait_for_selector(sel, timeout=3500)
-                    if msg_box:
-                        break
-                except Exception:
-                    continue
+                    await page.keyboard.press('Escape')
+                    await page.evaluate("""() => {
+                        const dismissButtons = document.querySelectorAll(
+                            '[aria-label="Đóng"], [aria-label="Close"], [aria-label="Decline optional cookies"], [aria-label="Từ chối các cookie không bắt buộc"], [aria-label="Bỏ qua"], [aria-label="Dismiss"], button[data-testid="cookie-policy-manage-dialog-decline-button"]'
+                        );
+                        dismissButtons.forEach(btn => { try { btn.click(); } catch(e){} });
+                    }""")
+                except Exception as dismiss_err:
+                    log_warning('FB_PERSONAL_SEND', f'Overlay dismiss notice: {dismiss_err}')
 
-            if msg_box:
-                # 1. Scroll into view and focus element directly in DOM to bypass pointer-events interception
-                await page.evaluate("""(el) => {
-                    try {
-                        el.scrollIntoView({ behavior: 'instant', block: 'center' });
-                        el.focus();
-                    } catch(e){}
-                }""", msg_box)
-                await asyncio.sleep(0.2)
-
-                # 2. Force click to ensure Facebook Lexical editor registers active focus
-                try:
-                    await msg_box.click(force=True, timeout=2000)
-                except Exception:
-                    pass
-                await asyncio.sleep(0.3)
-
-                # 3. Type characters one by one so Lexical react state updates
-                await page.keyboard.type(content, delay=15)
-                await asyncio.sleep(0.4)
-
-                # 4. Press Enter to send
-                await page.keyboard.press('Enter')
-                await asyncio.sleep(0.8)
-
-                # 5. Check if explicit send button exists and click it via JS
-                send_buttons = [
-                    'div[aria-label="Nhấn Enter để gửi"]',
-                    'div[aria-label="Send"]',
-                    'div[aria-label="Gửi"]',
-                    'svg[aria-label="Nhấn Enter để gửi"]',
-                    'div[role="button"][aria-label*="gửi" i]',
-                    'div[role="button"][aria-label*="send" i]'
+                # Try to find message input box (Lexical editor div[role="textbox"])
+                msg_box = None
+                selectors = [
+                    'div[role="textbox"][contenteditable="true"]',
+                    'div[role="textbox"]',
+                    'div[aria-label*="Tin nhắn"][contenteditable="true"]',
+                    'div[aria-label*="Message"][contenteditable="true"]',
+                    'div[aria-label*="Soạn"][contenteditable="true"]',
+                    'p.xat24cr'
                 ]
-                for btn_sel in send_buttons:
+                for sel in selectors:
                     try:
-                        btn = await page.query_selector(btn_sel)
-                        if btn:
-                            await page.evaluate("(b) => b.click()", btn)
-                            await asyncio.sleep(0.5)
+                        msg_box = await page.wait_for_selector(sel, timeout=3500)
+                        if msg_box:
                             break
                     except Exception:
+                        continue
+
+                if msg_box:
+                    # 1. Scroll into view and focus element directly in DOM to bypass pointer-events interception
+                    await page.evaluate("""(el) => {
+                        try {
+                            el.scrollIntoView({ behavior: 'instant', block: 'center' });
+                            el.focus();
+                        } catch(e){}
+                    }""", msg_box)
+                    await asyncio.sleep(0.2)
+
+                    # 2. Force click to ensure Facebook Lexical editor registers active focus
+                    try:
+                        await msg_box.click(force=True, timeout=2000)
+                    except Exception:
                         pass
-
-                # 6. Verify if text was actually dispatched from textbox
-                await asyncio.sleep(1.0)
-                remaining_text = await page.evaluate("""(el) => {
-                    return (el ? (el.innerText || el.textContent || '') : '').trim();
-                }""", msg_box)
-
-                if not remaining_text:
-                    log_info('FB_PERSONAL_SEND', f'Successfully dispatched message to Facebook user {clean_recipient} via desktop interface')
-                    return {
-                        "success": True,
-                        "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
-                        "method": "browser_desktop"
-                    }
-                else:
-                    log_warning('FB_PERSONAL_SEND', f'Desktop textbox still has content ("{remaining_text[:20]}..."). Desktop did not dispatch. Falling back to mobile...')
-            else:
-                log_warning('FB_PERSONAL_SEND', f'Desktop textbox not found on {url}, falling back to mobile endpoint...')
-        except Exception as dt_err:
-            log_warning('FB_PERSONAL_SEND', f'Desktop dispatch encounter: {dt_err}. Proceeding with mobile fallback...')
-
-        # 4. STAGE 2: Mobile Messenger Fallback (mbasic.facebook.com & m.facebook.com)
-        mobile_urls = [
-            f"https://mbasic.facebook.com/messages/read/?tid={clean_recipient}",
-            f"https://m.facebook.com/messages/read/?tid={clean_recipient}",
-            f"https://mbasic.facebook.com/messages/compose/?ids={clean_recipient}"
-        ]
-
-        for m_url in mobile_urls:
-            try:
-                log_info('FB_PERSONAL_SEND', f'Trying mobile fallback {m_url}...')
-                await page.goto(m_url, wait_until='domcontentloaded', timeout=15000)
-                await asyncio.sleep(1.5)
-
-                textarea = await page.query_selector('textarea[name="body"], textarea')
-                if textarea:
-                    await textarea.fill(content)
                     await asyncio.sleep(0.3)
 
-                    send_sub = await page.query_selector(
-                        'input[type="submit"][name="send"], input[type="submit"], input[name="send"], button[type="submit"]'
-                    )
-                    if send_sub:
-                        await page.evaluate("(b) => b.click()", send_sub)
-                        await asyncio.sleep(2.0)
+                    # 3. Type characters one by one so Lexical react state updates
+                    await page.keyboard.type(content, delay=15)
+                    await asyncio.sleep(0.4)
+
+                    # 4. Press Enter to send
+                    await page.keyboard.press('Enter')
+                    await asyncio.sleep(0.8)
+
+                    # 5. Check if explicit send button exists and click it via JS
+                    send_buttons = [
+                        'div[aria-label="Nhấn Enter để gửi"]',
+                        'div[aria-label="Send"]',
+                        'div[aria-label="Gửi"]',
+                        'svg[aria-label="Nhấn Enter để gửi"]',
+                        'div[role="button"][aria-label*="gửi" i]',
+                        'div[role="button"][aria-label*="send" i]'
+                    ]
+                    for btn_sel in send_buttons:
+                        try:
+                            btn = await page.query_selector(btn_sel)
+                            if btn:
+                                await page.evaluate("(b) => b.click()", btn)
+                                await asyncio.sleep(0.5)
+                                break
+                        except Exception:
+                            pass
+
+                    # 6. Verify if text was actually dispatched from textbox
+                    await asyncio.sleep(1.0)
+                    remaining_text = await page.evaluate("""(el) => {
+                        return (el ? (el.innerText || el.textContent || '') : '').trim();
+                    }""", msg_box)
+
+                    if not remaining_text:
+                        log_info('FB_PERSONAL_SEND', f'Successfully dispatched message to Facebook user {clean_recipient} via desktop interface')
+                        return {
+                            "success": True,
+                            "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
+                            "method": "browser_desktop"
+                        }
                     else:
-                        await page.evaluate("""(ta) => {
-                            const f = ta.closest('form');
-                            if (f) f.submit();
-                        }""", textarea)
-                        await asyncio.sleep(2.0)
+                        log_warning('FB_PERSONAL_SEND', f'Desktop textbox still has content ("{remaining_text[:20]}..."). Desktop did not dispatch. Falling back to mobile...')
+                else:
+                    log_warning('FB_PERSONAL_SEND', f'Desktop textbox not found on {url}, falling back to mobile endpoint...')
+            except Exception as dt_err:
+                log_warning('FB_PERSONAL_SEND', f'Desktop dispatch encounter: {dt_err}. Proceeding with mobile fallback...')
 
-                    log_info('FB_PERSONAL_SEND', f'Successfully dispatched personal message via mobile endpoint {m_url}')
-                    return {
-                        "success": True,
-                        "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
-                        "method": "browser_mobile"
-                    }
-            except Exception as mob_err:
-                log_warning('FB_PERSONAL_SEND', f'Mobile url {m_url} attempt error: {mob_err}')
-                continue
+            # 4. STAGE 2: Mobile Messenger Fallback (mbasic.facebook.com & m.facebook.com)
+            mobile_urls = [
+                f"https://mbasic.facebook.com/messages/read/?tid={clean_recipient}",
+                f"https://m.facebook.com/messages/read/?tid={clean_recipient}",
+                f"https://mbasic.facebook.com/messages/compose/?ids={clean_recipient}"
+            ]
 
-        return {
-            "success": False,
-            "error": f"Không thể gửi tin nhắn đến Facebook ({clean_recipient}). Vui lòng kiểm tra lại liên kết trang cá nhân, tài khoản người nhận có thể chặn nhận tin nhắn từ người lạ, hoặc làm mới Cookie Facebook cá nhân."
-        }
+            for m_url in mobile_urls:
+                try:
+                    log_info('FB_PERSONAL_SEND', f'Trying mobile fallback {m_url}...')
+                    await page.goto(m_url, wait_until='domcontentloaded', timeout=15000)
+                    await asyncio.sleep(1.5)
+
+                    textarea = await page.query_selector('textarea[name="body"], textarea')
+                    if textarea:
+                        await textarea.fill(content)
+                        await asyncio.sleep(0.3)
+
+                        send_sub = await page.query_selector(
+                            'input[type="submit"][name="send"], input[type="submit"], input[name="send"], button[type="submit"]'
+                        )
+                        if send_sub:
+                            await page.evaluate("(b) => b.click()", send_sub)
+                            await asyncio.sleep(2.0)
+                        else:
+                            await page.evaluate("""(ta) => {
+                                const f = ta.closest('form');
+                                if (f) f.submit();
+                            }""", textarea)
+                            await asyncio.sleep(2.0)
+
+                        log_info('FB_PERSONAL_SEND', f'Successfully dispatched personal message via mobile endpoint {m_url}')
+                        return {
+                            "success": True,
+                            "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
+                            "method": "browser_mobile"
+                        }
+                except Exception as mob_err:
+                    log_warning('FB_PERSONAL_SEND', f'Mobile url {m_url} attempt error: {mob_err}')
+                    continue
+
+            return {
+                "success": False,
+                "error": f"Không thể gửi tin nhắn đến Facebook ({clean_recipient}). Vui lòng kiểm tra lại liên kết trang cá nhân, tài khoản người nhận có thể chặn nhận tin nhắn từ người lạ, hoặc làm mới Cookie Facebook cá nhân."
+            }
+        finally:
+            try:
+                await page.close()
+            except Exception:
+                pass
 
     @classmethod
     async def sync_conversation_history(cls, db: Session, conversation_id: int) -> int:
@@ -546,7 +561,7 @@ class FBPersonalSyncService:
             except Exception:
                 return 0
 
-        page = await browser_manager.get_page()
+        page = await browser_manager.context.new_page()
         synced_count = 0
 
         try:
@@ -644,5 +659,10 @@ class FBPersonalSyncService:
 
         except Exception as e:
             log_warning('FB_PERSONAL_SYNC', f'Error syncing conversation #{conversation_id} history: {e}')
+        finally:
+            try:
+                await page.close()
+            except Exception:
+                pass
 
         return synced_count
