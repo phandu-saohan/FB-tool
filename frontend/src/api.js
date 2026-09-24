@@ -133,5 +133,28 @@ export const generateAIEmail = (data) => api.post('/email/ai/generate', data);
 export const testTelegramBot = (data) => api.post('/email/telegram/test', data);
 export const updateTelegramSettings = (data) => api.put('/email/telegram/settings', data);
 
+// ---------------------------------------------------------------------------
+// Zalo Marketing Suite API Methods
+// ---------------------------------------------------------------------------
+export const getZaloDashboard = () => api.get('/zalo/dashboard');
+export const getZaloGroups = (params) => api.get('/zalo/groups', { params });
+export const createZaloGroup = (data) => api.post('/zalo/groups', data);
+export const batchImportZaloGroups = (data) => api.post('/zalo/groups/batch-import', data);
+export const searchZaloGroups = (data) => api.post('/zalo/groups/search', data);
+export const deleteZaloGroup = (id) => api.delete(`/zalo/groups/${id}`);
+
+export const getZaloPosts = () => api.get('/zalo/posts');
+export const getZaloPost = (id) => api.get(`/zalo/posts/${id}`);
+export const createZaloPost = (data) => api.post('/zalo/posts', data);
+export const publishZaloPostNow = (id) => api.post(`/zalo/posts/${id}/publish-now`);
+export const scheduleZaloPost = (id, data) => api.post(`/zalo/posts/${id}/schedule`, data);
+export const pauseZaloCampaign = (id) => api.post(`/zalo/posts/${id}/pause`);
+export const cancelZaloCampaign = (id) => api.post(`/zalo/posts/${id}/cancel`);
+
+export const generateZaloAIPost = (data) => api.post('/zalo/ai/generate', data);
+export const getZaloSettings = () => api.get('/zalo/settings');
+export const updateZaloSettings = (data) => api.put('/zalo/settings', data);
+
 export default api;
+
 

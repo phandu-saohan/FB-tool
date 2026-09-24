@@ -444,3 +444,80 @@ class EmailAuditLog(Base):
     metadata_json = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, index=True)
 
+
+class ZaloGroup(Base):
+    __tablename__ = 'zalo_groups'
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), nullable=False)
+    group_link = Column(String(500), unique=True, nullable=False, index=True)
+    group_id_external = Column(String(100), nullable=True, index=True)
+    members_count = Column(Integer, default=0)
+    category = Column(String(100), default='Thẩm mỹ')
+    description = Column(Text, nullable=True)
+    is_joined = Column(Boolean, default=True)
+    can_post = Column(Boolean, default=True)
+    status = Column(String(50), default='ACTIVE')  # ACTIVE, PAUSED, RESTRICTED
+    last_posted_at = Column(DateTime, nullable=True)
+    post_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    post_items = relationship('ZaloPostItem', back_populates='group', cascade='all, delete-orphan')
+
+
+class ZaloPost(Base):
+    __tablename__ = 'zalo_posts'
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    media_urls = Column(Text, nullable=True)  # JSON list of media/image URLs
+    call_to_action_url = Column(String(500), nullable=True)
+    status = Column(String(50), default='DRAFT')  # DRAFT, SCHEDULED, PROCESSING, COMPLETED, PAUSED, FAILED
+    scheduled_at = Column(DateTime, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    delay_seconds = Column(Integer, default=20)  # Delay between groups
+    target_groups_count = Column(Integer, default=0)
+    success_count = Column(Integer, default=0)
+    failed_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    items = relationship('ZaloPostItem', back_populates='post', cascade='all, delete-orphan')
+
+
+class ZaloPostItem(Base):
+    __tablename__ = 'zalo_post_items'
+
+    id = Column(Integer, primary_key=True, index=True)
+    post_id = Column(Integer, ForeignKey('zalo_posts.id'), nullable=False, index=True)
+    group_id = Column(Integer, ForeignKey('zalo_groups.id'), nullable=False, index=True)
+    status = Column(String(50), default='PENDING')  # PENDING, SENDING, SENT, FAILED
+    sent_at = Column(DateTime, nullable=True)
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    post = relationship('ZaloPost', back_populates='items')
+    group = relationship('ZaloGroup', back_populates='post_items')
+
+
+class ZaloSetting(Base):
+    __tablename__ = 'zalo_settings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    account_name = Column(String(255), default='Tài khoản Zalo chính')
+    phone_number = Column(String(50), nullable=True)
+    session_cookie = Column(Text, nullable=True)
+    oa_secret_key = Column(String(255), nullable=True)
+    oa_access_token = Column(Text, nullable=True)
+    daily_limit = Column(Integer, default=50)
+    min_delay_seconds = Column(Integer, default=15)
+    max_delay_seconds = Column(Integer, default=45)
+    smart_cooldown_hours = Column(Integer, default=24)
+    is_active = Column(Boolean, default=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+

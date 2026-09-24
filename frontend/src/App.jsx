@@ -13,6 +13,7 @@ import LogsView from './views/LogsView';
 import SettingsView from './views/SettingsView';
 import CommentsView from './views/CommentsView';
 import EmailView from './views/EmailView';
+import ZaloView from './views/ZaloView';
 
 import { getBrowserStatus } from './api';
 
@@ -50,6 +51,8 @@ export default function App() {
         return <CommentsView />;
       case 'email':
         return <EmailView />;
+      case 'zalo':
+        return <ZaloView />;
       case 'groups':
         return <GroupsView setActiveTab={setActiveTab} />;
       case 'pages':
