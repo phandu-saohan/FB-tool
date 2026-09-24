@@ -521,3 +521,120 @@ class ZaloSetting(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
+# ---------------------------------------------------------------------------
+# OMNICHANNEL CHAT MODELS (FB Page, FB Personal, Zalo, WhatsApp)
+# ---------------------------------------------------------------------------
+
+class ChatChannel(Base):
+    __tablename__ = 'chat_channels'
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_type = Column(String(50), nullable=False, index=True)  # FB_PAGE, FB_PERSONAL, ZALO, WHATSAPP
+    name = Column(String(255), nullable=False)
+    account_identifier = Column(String(255), nullable=True, index=True)  # Page ID, FB UID, Zalo OA ID, WA Phone ID
+    status = Column(String(50), default='CONNECTED')  # CONNECTED, DISCONNECTED, ERROR
+    avatar_url = Column(String(500), nullable=True)
+    access_token = Column(Text, nullable=True)
+    webhook_secret = Column(String(255), nullable=True)
+    phone_number = Column(String(50), nullable=True)
+    metadata_json = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    contacts = relationship('ChatContact', back_populates='channel', cascade='all, delete-orphan')
+    conversations = relationship('ChatConversation', back_populates='channel', cascade='all, delete-orphan')
+
+
+class ChatContact(Base):
+    __tablename__ = 'chat_contacts'
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(Integer, ForeignKey('chat_channels.id'), nullable=False, index=True)
+    external_user_id = Column(String(255), nullable=False, index=True)
+    name = Column(String(255), nullable=False)
+    avatar_url = Column(String(500), nullable=True)
+    phone = Column(String(50), nullable=True, index=True)
+    email = Column(String(100), nullable=True)
+    tags = Column(String(500), default='[]')
+    notes = Column(Text, nullable=True)
+    customer_stage = Column(String(50), default='CONSULTING')  # LEAD, CONSULTING, BOOKED, CUSTOMER, VIP
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    channel = relationship('ChatChannel', back_populates='contacts')
+    conversations = relationship('ChatConversation', back_populates='contact', cascade='all, delete-orphan')
+
+
+class ChatConversation(Base):
+    __tablename__ = 'chat_conversations'
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(Integer, ForeignKey('chat_channels.id'), nullable=False, index=True)
+    contact_id = Column(Integer, ForeignKey('chat_contacts.id'), nullable=False, index=True)
+    title = Column(String(255), nullable=True)
+    unread_count = Column(Integer, default=0)
+    last_message_text = Column(Text, nullable=True)
+    last_message_at = Column(DateTime, default=datetime.utcnow, index=True)
+    last_message_sender = Column(String(50), default='CONTACT')  # CONTACT, AGENT, BOT
+    status = Column(String(50), default='OPEN')  # OPEN, RESOLVED, SNOOZED
+    assigned_agent = Column(String(100), default='CSKH Tổng')
+    ai_auto_reply = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    channel = relationship('ChatChannel', back_populates='conversations')
+    contact = relationship('ChatContact', back_populates='conversations')
+    messages = relationship('ChatMessage', back_populates='conversation', cascade='all, delete-orphan')
+
+
+class ChatMessage(Base):
+    __tablename__ = 'chat_messages'
+
+    id = Column(Integer, primary_key=True, index=True)
+    conversation_id = Column(Integer, ForeignKey('chat_conversations.id'), nullable=False, index=True)
+    sender_type = Column(String(50), nullable=False)  # CONTACT, AGENT, BOT
+    sender_name = Column(String(255), nullable=True)
+    sender_avatar = Column(String(500), nullable=True)
+    content = Column(Text, nullable=False)
+    message_type = Column(String(50), default='TEXT')  # TEXT, IMAGE, FILE, LOCATION
+    media_url = Column(String(500), nullable=True)
+    delivery_status = Column(String(50), default='SENT')  # PENDING, SENT, DELIVERED, READ, FAILED
+    external_message_id = Column(String(255), nullable=True, index=True)
+    error_message = Column(Text, nullable=True)
+    is_inbound = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+
+    conversation = relationship('ChatConversation', back_populates='messages')
+
+
+class ChatQuickReply(Base):
+    __tablename__ = 'chat_quick_replies'
+
+    id = Column(Integer, primary_key=True, index=True)
+    shortcut = Column(String(50), nullable=False, index=True)  # /chao, /gia, etc.
+    title = Column(String(255), nullable=False)
+    content = Column(Text, nullable=False)
+    channel_type = Column(String(50), default='ALL')
+    category = Column(String(100), default='Chăm sóc khách hàng')
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ChatSetting(Base):
+    __tablename__ = 'chat_settings'
+
+    id = Column(Integer, primary_key=True, index=True)
+    ai_auto_suggest = Column(Boolean, default=True)
+    ai_auto_reply_enabled = Column(Boolean, default=False)
+    auto_reply_outside_hours = Column(Boolean, default=False)
+    business_hours_start = Column(String(20), default='08:00')
+    business_hours_end = Column(String(20), default='21:00')
+    outside_hours_message = Column(
+        Text,
+        default='Cảm ơn bạn đã nhắn tin! Hiện tại ngoài giờ làm việc, chuyên viên sẽ phản hồi bạn sớm nhất vào đầu giờ sáng mai.'
+    )
+    sound_notifications = Column(Boolean, default=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+
+

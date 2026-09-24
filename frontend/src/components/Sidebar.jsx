@@ -10,10 +10,10 @@ import {
   Terminal, 
   Settings,
   ShieldAlert,
-  Bot,
   MessageSquareText,
   Mail,
-  MessageCircle
+  MessageCircle,
+  MessagesSquare
 } from 'lucide-react';
 
 export default function Sidebar({ activeTab, setActiveTab }) {
@@ -27,6 +27,7 @@ export default function Sidebar({ activeTab, setActiveTab }) {
     {
       title: 'CỘNG ĐỒNG & OUTREACH',
       items: [
+        { id: 'chat', label: 'Hộp thư Đa kênh', icon: MessagesSquare },
         { id: 'comments', label: 'Trợ lý bình luận', icon: MessageSquareText },
         { id: 'email', label: 'Email Campaign', icon: Mail },
         { id: 'zalo', label: 'Zalo Marketing', icon: MessageCircle }

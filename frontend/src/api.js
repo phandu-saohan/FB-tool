@@ -155,6 +155,33 @@ export const generateZaloAIPost = (data) => api.post('/zalo/ai/generate', data);
 export const getZaloSettings = () => api.get('/zalo/settings');
 export const updateZaloSettings = (data) => api.put('/zalo/settings', data);
 
+// ---------------------------------------------------------------------------
+// Omnichannel Chat API Methods (FB Page, FB Personal, Zalo, WhatsApp)
+// ---------------------------------------------------------------------------
+export const getChatStats = () => api.get('/chat/stats');
+export const getChatChannels = () => api.get('/chat/channels');
+export const createChatChannel = (data) => api.post('/chat/channels', data);
+export const updateChatChannel = (id, data) => api.put(`/chat/channels/${id}`, data);
+export const deleteChatChannel = (id) => api.delete(`/chat/channels/${id}`);
+
+export const getChatConversations = (params) => api.get('/chat/conversations', { params });
+export const getChatConversationDetail = (id) => api.get(`/chat/conversations/${id}`);
+export const updateChatConversation = (id, data) => api.patch(`/chat/conversations/${id}`, data);
+export const markChatConversationRead = (id) => api.post(`/chat/conversations/${id}/mark-read`);
+
+export const sendChatMessage = (conversationId, data) => api.post(`/chat/conversations/${conversationId}/messages`, data);
+export const getChatAISuggestions = (conversationId, data) => api.post(`/chat/conversations/${conversationId}/ai-suggest`, data);
+export const updateChatContact = (id, data) => api.patch(`/chat/contacts/${id}`, data);
+
+export const getChatQuickReplies = (channelType) => api.get('/chat/quick-replies', { params: { channel_type: channelType } });
+export const createChatQuickReply = (data) => api.post('/chat/quick-replies', data);
+export const deleteChatQuickReply = (id) => api.delete(`/chat/quick-replies/${id}`);
+
+export const simulateIncomingChatMessage = (data) => api.post('/chat/simulate-incoming', data);
+export const getChatSettings = () => api.get('/chat/settings');
+export const updateChatSettings = (data) => api.put('/chat/settings', data);
+
 export default api;
+
 
 

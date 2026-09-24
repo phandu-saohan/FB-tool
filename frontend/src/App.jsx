@@ -14,6 +14,7 @@ import SettingsView from './views/SettingsView';
 import CommentsView from './views/CommentsView';
 import EmailView from './views/EmailView';
 import ZaloView from './views/ZaloView';
+import ChatView from './views/ChatView';
 
 import { getBrowserStatus } from './api';
 
@@ -47,6 +48,8 @@ export default function App() {
     switch (activeTab) {
       case 'dashboard':
         return <DashboardView setActiveTab={setActiveTab} browserStatus={browserStatus} />;
+      case 'chat':
+        return <ChatView />;
       case 'comments':
         return <CommentsView />;
       case 'email':
