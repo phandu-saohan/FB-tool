@@ -296,5 +296,62 @@ class TestCommentAssistant(unittest.TestCase):
         self.assertEqual(list_res.status_code, 200)
         self.assertGreater(len(list_res.json()), 0)
 
+    def test_14_custom_comment_creation(self):
+        """Test user creating custom comments according to their wish (pending, approved, schedule)"""
+        # 1. Create with action = 'pending'
+        payload_pending = {
+            "post_url": "https://facebook.com/groups/thammy/posts/9988776655",
+            "group_name": "Cộng Đồng Thẩm Mỹ Trẻ Hóa",
+            "author_name": "Bác sĩ Minh",
+            "post_text": "Ca nâng cung chân mày kết hợp cấy mỡ tự thân sau 2 tuần.",
+            "comment_text": "Kỹ thuật xử lý nếp mí và cung mày rất tự nhiên, chúc mừng bác sĩ!",
+            "action": "pending"
+        }
+        res1 = self.client.post("/api/comments/custom", json=payload_pending)
+        self.assertEqual(res1.status_code, 200)
+        d1 = res1.json()
+        self.assertTrue(d1["success"])
+        self.assertEqual(d1["data"]["status"], "PENDING")
+
+        # 2. Create with action = 'approve'
+        payload_approve = {
+            "post_url": "https://facebook.com/groups/thammy/posts/1122334455",
+            "comment_text": "Kính mời bác sĩ tham dự Hội nghị Khoa học Thẩm mỹ Quốc tế 2026.",
+            "action": "approve"
+        }
+        res2 = self.client.post("/api/comments/custom", json=payload_approve)
+        self.assertEqual(res2.status_code, 200)
+        d2 = res2.json()
+        self.assertTrue(d2["success"])
+        self.assertEqual(d2["data"]["status"], "APPROVED")
+
+        # 3. Create with action = 'schedule'
+        payload_sched = {
+            "post_url": "https://facebook.com/groups/thammy/posts/5566778899",
+            "comment_text": "Thông tin chi tiết chương trình CME anh/chị xem thêm tại: https://aesthetichub.vn",
+            "action": "schedule",
+            "scheduled_at": (datetime.utcnow() + timedelta(hours=2)).isoformat()
+        }
+        res3 = self.client.post("/api/comments/custom", json=payload_sched)
+        self.assertEqual(res3.status_code, 200)
+        d3 = res3.json()
+        self.assertTrue(d3["success"])
+        self.assertEqual(d3["data"]["status"], "SCHEDULED")
+        self.assertIn("schedule", d3["data"])
+
+    def test_15_generate_custom_comment_ai(self):
+        """Test AI generator responding to custom prompt"""
+        payload = {
+            "prompt": "Khen ca căng chỉ đẹp và giới thiệu hội nghị 108",
+            "post_text": "Hình ảnh khách hàng sau căng chỉ collagen 3 ngày",
+            "tone": "Professional"
+        }
+        res = self.client.post("/api/comments/generate-custom", json=payload)
+        self.assertEqual(res.status_code, 200)
+        data = res.json()
+        self.assertTrue(data["success"])
+        self.assertTrue(len(data["comment_text"]) > 10)
+
 if __name__ == '__main__':
     unittest.main()
+

@@ -4,6 +4,8 @@ from sqlalchemy import func
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import json
+import uuid
+import re
 
 from app.database.database import get_db
 from app.database.models import (
@@ -32,7 +34,9 @@ from app.schemas.comment_schemas import (
     CampaignCreate,
     CampaignResponse,
     CommentSettingsUpdate,
-    CommentDashboardStats
+    CommentDashboardStats,
+    CustomCommentCreate,
+    GenerateCustomCommentRequest
 )
 from app.services.comment_assistant.providers.discovery_provider import (
     MockPostDiscoveryProvider,
@@ -449,9 +453,153 @@ def bulk_action_suggestions(req: BulkSuggestionActionRequest, db: Session = Depe
     CommentAuditLogger.record("COMMENT_APPROVED" if action == "approve" else "COMMENT_REJECTED", f"Thao tác hàng loạt '{action}' trên {len(suggs)} đề xuất.")
     return {"success": True, "message": f"Đã áp dụng thao tác '{action}' cho {len(suggs)} đề xuất."}
 
+@router.post("/custom")
+async def create_custom_comment(req: CustomCommentCreate, db: Session = Depends(get_db)):
+    """
+    Creates a user-defined custom comment for a target post or URL.
+    Supports immediate actions: PENDING, APPROVED, SCHEDULED, PUBLISHED.
+    """
+    comment_text = req.comment_text.strip()
+    if not comment_text:
+        raise HTTPException(status_code=400, detail="Nội dung bình luận không được để trống.")
+
+    # 1. Resolve or extract external_post_id
+    ext_id = req.external_post_id
+    if not ext_id and req.post_url:
+        match = re.search(r'(?:posts|story_fbid|fbid|videos|photos)/(\d+)', req.post_url)
+        if match:
+            ext_id = f"fb_{match.group(1)}"
+        else:
+            ext_id = f"custom_post_{uuid.uuid4().hex[:10]}"
+    elif not ext_id:
+        ext_id = f"custom_post_{uuid.uuid4().hex[:10]}"
+
+    # 2. Find or create DiscoveredPost
+    post = db.query(DiscoveredPost).filter(DiscoveredPost.external_post_id == ext_id).first()
+    if not post:
+        post = DiscoveredPost(
+            external_post_id=ext_id,
+            group_id=req.group_id or "custom_group",
+            group_name=req.group_name or "Nhóm người dùng chọn",
+            author_name=req.author_name or "Tác giả bài viết",
+            post_text=req.post_text or f"Bài viết mục tiêu: {req.post_url or ext_id}",
+            post_url=req.post_url,
+            relevance_score=100,
+            relevance_reason="Người dùng tự tạo bình luận theo ý muốn",
+            status="RELEVANT"
+        )
+        db.add(post)
+        db.commit()
+        db.refresh(post)
+
+    # 3. Create CommentSuggestion
+    action = (req.action or "pending").lower()
+    initial_status = "APPROVED" if action in ["approve", "schedule", "publish_now"] else "PENDING"
+
+    variants = [
+        {"tone": req.tone or "Custom", "text": comment_text}
+    ]
+
+    sugg = CommentSuggestion(
+        discovered_post_id=post.id,
+        conference_name=req.conference_name or "Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026",
+        registration_url=req.registration_url or "https://aesthetichub.vn/hoi-nghi-2026",
+        relevance_score=100,
+        reason="Bình luận do người dùng tự soạn theo ý muốn",
+        tone=req.tone or "Custom",
+        variants_json=json.dumps(variants, ensure_ascii=False),
+        selected_comment=comment_text,
+        disclosure_mode=req.disclosure_mode or "OPTIONAL",
+        disclosure_text=req.disclosure_text or "Thông tin chương trình do BTC cung cấp.",
+        status=initial_status,
+        tags=req.tags or "Tự soạn"
+    )
+    db.add(sugg)
+    db.commit()
+    db.refresh(sugg)
+
+    # Record Human Approval if approved/scheduled/published
+    if initial_status == "APPROVED":
+        approval = CommentApproval(
+            suggestion_id=sugg.id,
+            reviewer_id="user",
+            action="APPROVED",
+            previous_text=comment_text,
+            final_text=comment_text,
+            reason="Người dùng tạo và duyệt trực tiếp"
+        )
+        db.add(approval)
+        db.commit()
+
+    CommentAuditLogger.record("COMMENT_SUGGESTED", f"Tạo bình luận theo ý muốn cho '{ext_id}' (Hành động: {action})")
+
+    # 4. Handle Schedule or Publish Now
+    result_detail = {
+        "suggestion_id": sugg.id,
+        "post_id": post.id,
+        "status": sugg.status,
+        "action": action,
+        "selected_comment": sugg.selected_comment
+    }
+
+    if action == "schedule":
+        scheduled_at = req.scheduled_at or (datetime.utcnow() + timedelta(minutes=15))
+        sched_res = comment_scheduler.schedule_comment(
+            suggestion_id=sugg.id,
+            scheduled_at=scheduled_at,
+            comment_text=comment_text
+        )
+        if not sched_res.get("success"):
+            raise HTTPException(status_code=400, detail=sched_res.get("message"))
+        db.refresh(sugg)
+        result_detail["status"] = sugg.status
+        result_detail["schedule"] = sched_res
+
+    elif action == "publish_now":
+        sched_res = comment_scheduler.schedule_comment(
+            suggestion_id=sugg.id,
+            scheduled_at=datetime.utcnow(),
+            comment_text=comment_text
+        )
+        if not sched_res.get("success"):
+            raise HTTPException(status_code=400, detail=sched_res.get("message"))
+        
+        pub_res = await comment_scheduler.execute_publish(sched_res["scheduled_id"])
+        db.refresh(sugg)
+        result_detail["status"] = sugg.status
+        result_detail["publish"] = pub_res
+        if not pub_res.get("success"):
+            raise HTTPException(status_code=400, detail=pub_res.get("message"))
+
+
+    return {
+        "success": True,
+        "message": "Đã tạo bình luận theo ý muốn thành công!",
+        "data": result_detail
+    }
+
+@router.post("/generate-custom")
+async def generate_custom_comment_ai(req: GenerateCustomCommentRequest):
+    """
+    Calls AI to generate a custom comment based on user's exact instructions/prompt.
+    """
+    prompt = req.prompt.strip()
+    if not prompt:
+        raise HTTPException(status_code=400, detail="Vui lòng nhập ý tưởng/yêu cầu cho bình luận.")
+
+    res = await CommentGeneratorService.generate_custom_comment(
+        prompt=prompt,
+        post_text=req.post_text or "",
+        conference_name=req.conference_name or "Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026",
+        registration_url=req.registration_url or "https://aesthetichub.vn/hoi-nghi-2026",
+        tone=req.tone or "Professional"
+    )
+    return res
+
 # ---------------------------------------------------------------------------
 # 5. SCHEDULER, RATE LIMITING & PUBLISHING
 # ---------------------------------------------------------------------------
+
 
 @router.post("/schedule")
 def schedule_comment_endpoint(req: ScheduleCommentRequest):

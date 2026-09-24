@@ -46,11 +46,14 @@ import {
   getCommentAnalytics,
   getCommentLogs,
   getCommentSettings,
-  updateCommentSettings
+  updateCommentSettings,
+  createCustomComment,
+  generateCustomCommentAI
 } from '../api';
 import Pagination, { usePagination } from '../components/Pagination';
 
 export default function CommentsView() {
+
   const [activeTab, setActiveTab] = useState('approval'); // approval, discovery, schedule, campaigns, analytics, settings
   const [loading, setLoading] = useState(false);
   const [statusNotice, setStatusNotice] = useState('');
@@ -116,7 +119,27 @@ export default function CommentsView() {
   const [settings, setSettings] = useState(null);
   const [logs, setLogs] = useState([]);
 
+  // Custom Comment State
+  const [showCustomCommentModal, setShowCustomCommentModal] = useState(false);
+  const [isGeneratingCustomAI, setIsGeneratingCustomAI] = useState(false);
+  const [aiCustomPrompt, setAiCustomPrompt] = useState('');
+  const [customComment, setCustomComment] = useState({
+    post_url: '',
+    group_name: '',
+    author_name: '',
+    post_text: '',
+    comment_text: '',
+    conference_name: 'Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026',
+    registration_url: 'https://aesthetichub.vn/hoi-nghi-2026',
+    tone: 'Professional',
+    disclosure_mode: 'OPTIONAL',
+    disclosure_text: 'Thông tin chương trình do BTC cung cấp.',
+    action: 'pending',
+    scheduled_at: ''
+  });
+
   // Pagination Hooks
+
   const paginatedSuggestions = usePagination(suggestions, 8);
   const paginatedDiscovered = usePagination(discoveredPosts, 8);
   const paginatedSchedules = usePagination(schedules, 10);
@@ -380,6 +403,77 @@ export default function CommentsView() {
     }
   };
 
+  // Custom Comment AI Generator
+  const handleGenerateCustomAI = async () => {
+    if (!aiCustomPrompt.trim()) {
+      alert('Vui lòng nhập ý tưởng/yêu cầu cho bình luận.');
+      return;
+    }
+    setIsGeneratingCustomAI(true);
+    try {
+      const res = await generateCustomCommentAI({
+        prompt: aiCustomPrompt,
+        post_text: customComment.post_text,
+        conference_name: customComment.conference_name,
+        registration_url: customComment.registration_url,
+        tone: customComment.tone
+      });
+      if (res.data?.comment_text) {
+        setCustomComment(prev => ({ ...prev, comment_text: res.data.comment_text }));
+      }
+    } catch (err) {
+      alert('Lỗi tạo bình luận bằng AI: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setIsGeneratingCustomAI(false);
+    }
+  };
+
+  // Submit Custom Comment
+  const handleSubmitCustomComment = async (e) => {
+    e.preventDefault();
+    if (!customComment.comment_text.trim()) {
+      alert('Vui lòng nhập nội dung bình luận.');
+      return;
+    }
+    if (customComment.action === 'schedule' && !customComment.scheduled_at) {
+      alert('Vui lòng chọn thời gian lên lịch đăng.');
+      return;
+    }
+    setLoading(true);
+    try {
+      const payload = {
+        ...customComment,
+        scheduled_at: customComment.scheduled_at ? new Date(customComment.scheduled_at).toISOString() : null
+      };
+      const res = await createCustomComment(payload);
+      alert(res.data.message || 'Đã tạo bình luận theo ý muốn thành công!');
+      setShowCustomCommentModal(false);
+      setCustomComment({
+        post_url: '',
+        group_name: '',
+        author_name: '',
+        post_text: '',
+        comment_text: '',
+        conference_name: 'Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026',
+        registration_url: 'https://aesthetichub.vn/hoi-nghi-2026',
+        tone: 'Professional',
+        disclosure_mode: 'OPTIONAL',
+        disclosure_text: 'Thông tin chương trình do BTC cung cấp.',
+        action: 'pending',
+        scheduled_at: ''
+      });
+      setAiCustomPrompt('');
+      await loadStats();
+      if (activeTab === 'approval') await loadSuggestions();
+      else if (activeTab === 'schedule') await loadSchedules();
+      else if (activeTab === 'discovery') await loadDiscoveryData();
+    } catch (err) {
+      alert('Lỗi tạo bình luận: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
       {/* Top Banner & Header */}
@@ -405,8 +499,16 @@ export default function CommentsView() {
           </div>
         </div>
 
-        {/* Emergency Stop Button */}
-        <div className="flex items-center space-x-3">
+        {/* Action Buttons: Custom Comment, Refresh, Emergency Stop */}
+        <div className="flex flex-wrap items-center gap-2.5">
+          <button
+            onClick={() => setShowCustomCommentModal(true)}
+            className="flex items-center space-x-2 px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs uppercase tracking-wider transition-all shadow-md shadow-purple-600/20 active:scale-95"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Tạo bình luận theo ý muốn</span>
+          </button>
+
           <button
             onClick={loadStats}
             className="p-2.5 rounded-xl bg-white hover:bg-slate-50 text-slate-600 transition-colors border border-slate-200 shadow-2xs"
@@ -424,6 +526,7 @@ export default function CommentsView() {
           </button>
         </div>
       </div>
+
 
       {/* Metric Cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
@@ -534,8 +637,16 @@ export default function CommentsView() {
               ))}
             </div>
 
-            {/* Bulk Operations */}
-            <div className="flex items-center space-x-2">
+            {/* Bulk Operations & Custom Comment */}
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => setShowCustomCommentModal(true)}
+                className="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white text-xs font-semibold rounded-lg flex items-center space-x-1.5 shadow-xs transition"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Tạo bình luận theo ý muốn</span>
+              </button>
+
               <button
                 disabled={selectedIds.length === 0}
                 onClick={() => handleBulkAction('approve')}
@@ -552,6 +663,7 @@ export default function CommentsView() {
               </button>
             </div>
           </div>
+
 
           {/* Suggestions List */}
           {loading ? (
@@ -746,14 +858,24 @@ export default function CommentsView() {
                   Sử dụng MockPostDiscoveryProvider (chế độ demo an toàn, không scraping).
                 </p>
               </div>
-              <button
-                onClick={() => setShowNewRuleModal(true)}
-                className="px-3 py-2 bg-white hover:bg-slate-50 text-purple-700 text-xs font-semibold rounded-xl flex items-center space-x-1.5 border border-slate-200 shadow-2xs transition"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Thêm quy tắc giám sát</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowCustomCommentModal(true)}
+                  className="px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white text-xs font-semibold rounded-xl flex items-center space-x-1.5 shadow transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Tạo bình luận theo ý muốn</span>
+                </button>
+                <button
+                  onClick={() => setShowNewRuleModal(true)}
+                  className="px-3 py-2 bg-white hover:bg-slate-50 text-purple-700 text-xs font-semibold rounded-xl flex items-center space-x-1.5 border border-slate-200 shadow-2xs transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Thêm quy tắc giám sát</span>
+                </button>
+              </div>
             </div>
+
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
@@ -1317,6 +1439,210 @@ export default function CommentsView() {
           </div>
         </div>
       )}
+
+      {/* MODAL: Tạo bình luận theo ý muốn (Custom Comment) */}
+      {showCustomCommentModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl my-8">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-purple-50 border border-purple-200 flex items-center justify-center text-purple-600">
+                  <MessageSquareText className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Tạo bình luận theo ý muốn</h3>
+                  <p className="text-xs text-slate-500">Tự do soạn nội dung hoặc dùng AI viết hộ theo yêu cầu cụ thể</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowCustomCommentModal(false)}
+                className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg hover:bg-slate-100 transition"
+              >
+                <XCircle className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitCustomComment} className="space-y-4">
+              {/* Post Target Info */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  1. Thông tin bài viết mục tiêu (Facebook Post)
+                </span>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-xs text-slate-600 font-medium block mb-1">
+                      Link bài viết Facebook (hoặc Post ID)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="https://facebook.com/groups/.../posts/123456"
+                      value={customComment.post_url}
+                      onChange={(e) => setCustomComment({ ...customComment, post_url: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-xs text-slate-600 font-medium block mb-1">
+                      Tên nhóm / Tác giả bài viết
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        placeholder="Tên nhóm (tùy chọn)"
+                        value={customComment.group_name}
+                        onChange={(e) => setCustomComment({ ...customComment, group_name: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Tác giả (tùy chọn)"
+                        value={customComment.author_name}
+                        onChange={(e) => setCustomComment({ ...customComment, author_name: e.target.value })}
+                        className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs text-slate-600 font-medium block mb-1">
+                    Trích đoạn nội dung bài viết gốc (để tiện theo dõi ngữ cảnh)
+                  </label>
+                  <textarea
+                    rows={2}
+                    placeholder="Ví dụ: Bác sĩ vừa thực hiện ca nâng mũi cấu trúc sụn sườn..."
+                    value={customComment.post_text}
+                    onChange={(e) => setCustomComment({ ...customComment, post_text: e.target.value })}
+                    className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                  />
+                </div>
+              </div>
+
+              {/* AI Helper Bar */}
+              <div className="bg-purple-50/60 p-4 rounded-xl border border-purple-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-purple-900 flex items-center space-x-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+                    <span>Trợ lý AI viết bình luận theo ý tưởng</span>
+                  </span>
+                  <span className="text-[11px] text-purple-700">Gemini 2.5 / Fallback</span>
+                </div>
+
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Nhập ý tưởng: Khen ngợi kết quả đẹp mắt, mời tham dự Hội nghị 108..."
+                    value={aiCustomPrompt}
+                    onChange={(e) => setAiCustomPrompt(e.target.value)}
+                    className="flex-1 bg-white border border-purple-200 rounded-xl px-3 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                  />
+                  <button
+                    type="button"
+                    disabled={isGeneratingCustomAI || !aiCustomPrompt.trim()}
+                    onClick={handleGenerateCustomAI}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl flex items-center space-x-1.5 shadow transition disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>{isGeneratingCustomAI ? 'Đang viết...' : 'AI Viết ngay'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Comment Content Box */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                    2. Nội dung bình luận theo ý muốn *
+                  </label>
+                  <span className="text-[11px] text-slate-400">
+                    {customComment.comment_text.length} ký tự
+                  </span>
+                </div>
+                <textarea
+                  required
+                  rows={4}
+                  placeholder="Nhập chính xác nội dung bình luận bạn muốn đăng (hoặc dùng AI gợi ý ở trên)..."
+                  value={customComment.comment_text}
+                  onChange={(e) => setCustomComment({ ...customComment, comment_text: e.target.value })}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-xs text-slate-800 focus:outline-none focus:border-purple-500 focus:bg-white transition leading-relaxed"
+                />
+              </div>
+
+              {/* Action Choice: Pending, Approve, Schedule, Publish Now */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <span className="text-xs font-bold text-slate-700 uppercase tracking-wider block">
+                  3. Hành động thực thi sau khi tạo
+                </span>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {[
+                    { id: 'pending', label: '📥 Chờ duyệt', desc: 'Lưu vào hàng đợi' },
+                    { id: 'approve', label: '✅ Duyệt ngay', desc: 'Sẵn sàng đăng' },
+                    { id: 'schedule', label: '⏱️ Lên lịch', desc: 'Hẹn giờ đăng' },
+                    { id: 'publish_now', label: '🚀 Đăng ngay', desc: 'Xuất bản tức thì' }
+                  ].map((act) => (
+                    <div
+                      key={act.id}
+                      onClick={() => setCustomComment({ ...customComment, action: act.id })}
+                      className={`p-2.5 rounded-xl border text-xs cursor-pointer transition flex flex-col justify-between ${
+                        customComment.action === act.id
+                          ? 'bg-purple-600 text-white border-purple-600 shadow-xs'
+                          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-100/80'
+                      }`}
+                    >
+                      <div className="font-bold flex items-center justify-between">
+                        <span>{act.label}</span>
+                        {customComment.action === act.id && <Check className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                      <span className={`text-[10px] mt-1 ${customComment.action === act.id ? 'text-purple-100' : 'text-slate-400'}`}>
+                        {act.desc}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+
+                {customComment.action === 'schedule' && (
+                  <div className="pt-2 border-t border-slate-200/80 space-y-1">
+                    <label className="text-xs text-slate-600 font-medium block">
+                      Thời gian đăng dự kiến (Asia/Ho_Chi_Minh) *
+                    </label>
+                    <input
+                      required
+                      type="datetime-local"
+                      value={customComment.scheduled_at}
+                      onChange={(e) => setCustomComment({ ...customComment, scheduled_at: e.target.value })}
+                      className="w-full bg-white border border-slate-200 rounded-xl p-2.5 text-xs text-slate-800 focus:outline-none focus:border-purple-500 transition"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Modal Footer Buttons */}
+              <div className="flex items-center justify-end space-x-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowCustomCommentModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-xl transition"
+                >
+                  Đóng
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || !customComment.comment_text.trim()}
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-500 text-white font-bold text-xs rounded-xl shadow transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>{loading ? 'Đang xử lý...' : 'Xác nhận tạo bình luận'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

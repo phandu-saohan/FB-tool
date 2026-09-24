@@ -144,3 +144,28 @@ class CommentDashboardStats(BaseModel):
     automation_enabled: bool
     daily_limit: int
     daily_used: int
+
+class CustomCommentCreate(BaseModel):
+    post_url: Optional[str] = None
+    external_post_id: Optional[str] = None
+    group_name: Optional[str] = None
+    group_id: Optional[str] = None
+    author_name: Optional[str] = "Tác giả bài viết"
+    post_text: Optional[str] = ""
+    comment_text: str
+    conference_name: Optional[str] = "Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026"
+    registration_url: Optional[str] = "https://aesthetichub.vn/hoi-nghi-2026"
+    tone: Optional[str] = "Custom"
+    disclosure_mode: Optional[str] = "OPTIONAL"
+    disclosure_text: Optional[str] = "Thông tin chương trình do BTC cung cấp."
+    tags: Optional[str] = "Tự soạn"
+    action: Optional[str] = "pending"  # "pending", "approve", "schedule", "publish_now"
+    scheduled_at: Optional[datetime] = None
+
+class GenerateCustomCommentRequest(BaseModel):
+    prompt: str
+    post_text: Optional[str] = ""
+    conference_name: Optional[str] = "Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026"
+    registration_url: Optional[str] = "https://aesthetichub.vn/hoi-nghi-2026"
+    tone: Optional[str] = "Professional"
+

@@ -77,6 +77,9 @@ export const getCommentAnalytics = () => api.get('/comments/analytics');
 export const getCommentLogs = (limit = 50) => api.get('/comments/logs', { params: { limit } });
 export const getCommentSettings = () => api.get('/comments/settings');
 export const updateCommentSettings = (data) => api.put('/comments/settings', data);
+export const createCustomComment = (data) => api.post('/comments/custom', data);
+export const generateCustomCommentAI = (data) => api.post('/comments/generate-custom', data);
+
 
 // ---------------------------------------------------------------------------
 // Email Campaign Queue & Reliable Sending API Methods

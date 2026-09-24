@@ -180,3 +180,49 @@ class CommentGeneratorService:
             "disclosure_mode": disclosure_mode,
             "disclosure_text": disclosure_text
         }
+
+    @classmethod
+    async def generate_custom_comment(
+        cls,
+        prompt: str,
+        post_text: str = "",
+        conference_name: str = "Hội Nghị Khoa Học Thẩm Mỹ Quốc Tế 2026",
+        registration_url: str = "https://aesthetichub.vn/hoi-nghi-2026",
+        tone: str = "Professional"
+    ) -> Dict[str, Any]:
+        """
+        Generates a custom comment strictly following user-specified prompt/intent.
+        """
+        try:
+            provider = get_provider()
+            ai_prompt = (
+                f"Bạn là trợ lý truyền thông chuyên nghiệp cho hội nghị khoa học thẩm mỹ.\n"
+                f"Hãy viết 1 đoạn bình luận Facebook ngắn gọn, tự nhiên, văn minh và lịch sự theo đúng yêu cầu sau:\n"
+                f"YÊU CẦU CỤ THỂ CỦA NGƯỜI DÙNG: \"{prompt}\"\n\n"
+                f"Thông tin hội nghị: {conference_name}\n"
+                f"Link đăng ký/thông tin (nếu cần chèn): {registration_url}\n"
+                f"Nội dung bài viết liên quan (nếu có): \"{post_text}\"\n"
+                f"Phong cách: {tone}\n\n"
+                f"Yêu cầu:\n"
+                f"- Trả về duy nhất đoạn văn bản bình luận hoàn chỉnh, không rào đón, không để trong dấu ngoặc kép hay markdown block.\n"
+                f"- Độ dài từ 2 đến 4 câu vừa vặn cho Facebook comment."
+            )
+            raw = await provider.generate(ai_prompt)
+            cleaned = re.sub(r'```[a-zA-Z]*\s*|\s*```', '', raw).strip().strip('"').strip("'")
+            if cleaned:
+                return {
+                    "success": True,
+                    "comment_text": cleaned,
+                    "source": "AI"
+                }
+        except Exception:
+            pass
+
+        # Fallback template based on user prompt
+        fallback_text = f"Chào anh/chị, về chủ đề bạn quan tâm, anh/chị có thể tham khảo thêm tại {conference_name}: {registration_url}"
+        return {
+            "success": True,
+            "comment_text": fallback_text,
+            "source": "TemplateFallback"
+        }
+
