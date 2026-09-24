@@ -123,6 +123,36 @@ class TestOmnichannelChat(unittest.TestCase):
         self.assertEqual(detail["last_message_sender"], "AGENT")
         self.assertEqual(detail["unread_count"], 0)
 
+    def test_03b_send_fb_personal_outbound_message(self):
+        # 1. Simulate incoming message to create FB_PERSONAL conversation
+        sim_payload = {
+            "channel_type": "FB_PERSONAL",
+            "sender_name": "Nguyễn Hoàng Nam (Bạn bè)",
+            "message_text": "Bác sĩ ơi cho em hỏi lịch khám"
+        }
+        sim_res = self.client.post("/api/chat/simulate-incoming", json=sim_payload)
+        self.assertEqual(sim_res.status_code, 200)
+        sim_data = sim_res.json()
+        conv_id = sim_data["conversation_id"]
+
+        # 2. Send outbound reply via FB_PERSONAL channel
+        send_payload = {
+            "content": "Chào bạn, chiều nay phòng khám mở cửa từ 14h nhé!",
+            "message_type": "TEXT",
+            "sender_name": "Bác sĩ Tuấn Anh"
+        }
+        res = self.client.post(f"/api/chat/conversations/{conv_id}/messages", json=send_payload)
+        self.assertEqual(res.status_code, 200)
+        msg = res.json()
+        self.assertEqual(msg["sender_type"], "AGENT")
+        self.assertEqual(msg["delivery_status"], "SENT")
+        self.assertIn("fb_pers_", msg["external_message_id"])
+
+        # 3. Check conversation updated
+        detail = self.client.get(f"/api/chat/conversations/{conv_id}").json()
+        self.assertEqual(detail["last_message_text"], send_payload["content"])
+        self.assertEqual(detail["last_message_sender"], "AGENT")
+
     def test_04_simulate_incoming_messages_across_channels(self):
         # Test simulation for each platform
         platforms = ["FB_PAGE", "FB_PERSONAL", "ZALO", "WHATSAPP"]
