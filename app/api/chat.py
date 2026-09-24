@@ -273,6 +273,17 @@ def get_conversation_detail(id: int, db: Session = Depends(get_db)):
         "messages": messages
     }
 
+@router.post("/conversations/{id}/sync", response_model=ChatConversationDetailResponse)
+async def sync_conversation_messages(id: int, db: Session = Depends(get_db)):
+    conv = db.query(ChatConversation).filter(ChatConversation.id == id).first()
+    if not conv:
+        raise HTTPException(status_code=404, detail="Cuộc hội thoại không tồn tại")
+
+    if conv.channel and conv.channel.channel_type == 'FB_PERSONAL':
+        await FBPersonalSyncService.sync_conversation_history(db, id)
+
+    return get_conversation_detail(id, db)
+
 @router.patch("/conversations/{id}", response_model=ChatConversationResponse)
 def update_conversation(id: int, c_in: ChatConversationUpdate, db: Session = Depends(get_db)):
     conv = db.query(ChatConversation).filter(ChatConversation.id == id).first()

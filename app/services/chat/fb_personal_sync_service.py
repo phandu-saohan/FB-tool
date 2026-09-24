@@ -158,9 +158,11 @@ class FBPersonalSyncService:
                         seenIds.add(threadId);
 
                         // Extract text elements inside link
-                        const textContent = link.innerText.split('\\n').map(t => t.trim()).filter(Boolean);
-                        const name = textContent[0] || ('Bạn bè ' + threadId);
-                        const snippet = textContent.slice(1).join(' - ') || 'Đang trò chuyện';
+                        const textContent = link.innerText.split('\n').map(t => t.trim()).filter(Boolean);
+                        const ignoreTexts = ['đang hoạt động', 'active now', 'hoạt động', 'online'];
+                        const filteredLines = textContent.filter(t => !ignoreTexts.some(ign => t.toLowerCase().includes(ign)));
+                        const name = filteredLines[0] || textContent[0] || ('Bạn bè ' + threadId);
+                        const snippet = filteredLines.slice(1).join(' - ') || textContent.slice(1).join(' - ') || 'Đang trò chuyện';
 
                         // Avatar
                         const img = link.querySelector('img');
@@ -214,6 +216,11 @@ class FBPersonalSyncService:
             snippet = item["snippet"]
             avatar = item.get("avatar_url") or f"https://api.dicebear.com/7.x/bottts/svg?seed={tid}"
 
+            clean_snippet = re.sub(r'^(Bạn|You):\s*', '', snippet).strip()
+            is_from_me = snippet.startswith("Bạn:") or snippet.startswith("You:")
+            sender_type = "AGENT" if is_from_me else "CONTACT"
+            is_inbound = not is_from_me
+
             # Contact
             contact = db.query(ChatContact).filter(
                 ChatContact.channel_id == ch.id,
@@ -234,7 +241,8 @@ class FBPersonalSyncService:
                 db.add(contact)
                 db.flush()
             else:
-                contact.name = tname
+                if tname and tname != "Đang hoạt động":
+                    contact.name = tname
                 if avatar:
                     contact.avatar_url = avatar
                 contact.updated_at = datetime.utcnow()
@@ -250,10 +258,10 @@ class FBPersonalSyncService:
                     channel_id=ch.id,
                     contact_id=contact.id,
                     title=f"Chat FB Cá nhân: {contact.name}",
-                    unread_count=1,
-                    last_message_text=snippet,
+                    unread_count=1 if is_inbound else 0,
+                    last_message_text=clean_snippet,
                     last_message_at=datetime.utcnow(),
-                    last_message_sender="CONTACT",
+                    last_message_sender=sender_type,
                     status="OPEN",
                     assigned_agent="Admin (Cá nhân)",
                     created_at=datetime.utcnow(),
@@ -265,21 +273,46 @@ class FBPersonalSyncService:
                 # Add initial message
                 msg = ChatMessage(
                     conversation_id=conv.id,
-                    sender_type="CONTACT",
-                    sender_name=contact.name,
-                    sender_avatar=contact.avatar_url,
-                    content=snippet,
+                    sender_type=sender_type,
+                    sender_name="Tôi" if is_from_me else contact.name,
+                    sender_avatar="/assets/agent-avatar.png" if is_from_me else contact.avatar_url,
+                    content=clean_snippet,
                     message_type="TEXT",
                     delivery_status="DELIVERED",
                     external_message_id=f"fb_pers_sync_{uuid.uuid4().hex[:8]}",
-                    is_inbound=True,
+                    is_inbound=is_inbound,
                     created_at=datetime.utcnow()
                 )
                 db.add(msg)
             else:
-                conv.last_message_text = snippet
-                conv.last_message_at = datetime.utcnow()
-                conv.updated_at = datetime.utcnow()
+                # Check last message in DB for this conversation
+                last_msg = db.query(ChatMessage).filter(
+                    ChatMessage.conversation_id == conv.id
+                ).order_by(ChatMessage.id.desc()).first()
+
+                # If this is a new message from Facebook, insert ChatMessage!
+                if not last_msg or last_msg.content.strip() != clean_snippet:
+                    new_msg = ChatMessage(
+                        conversation_id=conv.id,
+                        sender_type=sender_type,
+                        sender_name="Tôi" if is_from_me else contact.name,
+                        sender_avatar="/assets/agent-avatar.png" if is_from_me else contact.avatar_url,
+                        content=clean_snippet,
+                        message_type="TEXT",
+                        delivery_status="DELIVERED",
+                        external_message_id=f"fb_pers_inbound_{uuid.uuid4().hex[:8]}",
+                        is_inbound=is_inbound,
+                        created_at=datetime.utcnow()
+                    )
+                    db.add(new_msg)
+                    conv.last_message_text = clean_snippet
+                    conv.last_message_at = datetime.utcnow()
+                    conv.last_message_sender = sender_type
+                    if is_inbound:
+                        conv.unread_count = (conv.unread_count or 0) + 1
+                        if conv.status == 'RESOLVED':
+                            conv.status = 'OPEN'
+                    conv.updated_at = datetime.utcnow()
 
             saved_count += 1
 
@@ -407,7 +440,7 @@ class FBPersonalSyncService:
 
                 # 4. Press Enter to send
                 await page.keyboard.press('Enter')
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.8)
 
                 # 5. Check if explicit send button exists and click it via JS
                 send_buttons = [
@@ -428,21 +461,30 @@ class FBPersonalSyncService:
                     except Exception:
                         pass
 
-                log_info('FB_PERSONAL_SEND', f'Successfully dispatched message to Facebook user {clean_recipient} via desktop interface')
-                return {
-                    "success": True,
-                    "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
-                    "method": "browser_desktop"
-                }
+                # 6. Verify if text was actually dispatched from textbox
+                await asyncio.sleep(1.0)
+                remaining_text = await page.evaluate("""(el) => {
+                    return (el ? (el.innerText || el.textContent || '') : '').trim();
+                }""", msg_box)
+
+                if not remaining_text:
+                    log_info('FB_PERSONAL_SEND', f'Successfully dispatched message to Facebook user {clean_recipient} via desktop interface')
+                    return {
+                        "success": True,
+                        "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
+                        "method": "browser_desktop"
+                    }
+                else:
+                    log_warning('FB_PERSONAL_SEND', f'Desktop textbox still has content ("{remaining_text[:20]}..."). Desktop did not dispatch. Falling back to mobile...')
             else:
                 log_warning('FB_PERSONAL_SEND', f'Desktop textbox not found on {url}, falling back to mobile endpoint...')
         except Exception as dt_err:
             log_warning('FB_PERSONAL_SEND', f'Desktop dispatch encounter: {dt_err}. Proceeding with mobile fallback...')
 
-        # 4. STAGE 2: Mobile Messenger Fallback (m.facebook.com & mbasic.facebook.com)
+        # 4. STAGE 2: Mobile Messenger Fallback (mbasic.facebook.com & m.facebook.com)
         mobile_urls = [
-            f"https://m.facebook.com/messages/read/?tid={clean_recipient}",
             f"https://mbasic.facebook.com/messages/read/?tid={clean_recipient}",
+            f"https://m.facebook.com/messages/read/?tid={clean_recipient}",
             f"https://mbasic.facebook.com/messages/compose/?ids={clean_recipient}"
         ]
 
@@ -454,26 +496,28 @@ class FBPersonalSyncService:
 
                 textarea = await page.query_selector('textarea[name="body"], textarea')
                 if textarea:
-                    await page.evaluate("""(ta, text) => {
-                        ta.focus();
-                        ta.value = text;
-                        ta.dispatchEvent(new Event('input', { bubbles: true }));
-                        ta.dispatchEvent(new Event('change', { bubbles: true }));
-                    }""", textarea, content)
+                    await textarea.fill(content)
                     await asyncio.sleep(0.3)
 
                     send_sub = await page.query_selector(
-                        'input[name="send"], button[name="send"], input[type="submit"], button[type="submit"]'
+                        'input[type="submit"][name="send"], input[type="submit"], input[name="send"], button[type="submit"]'
                     )
                     if send_sub:
                         await page.evaluate("(b) => b.click()", send_sub)
-                        await asyncio.sleep(1.5)
-                        log_info('FB_PERSONAL_SEND', f'Successfully dispatched personal message via mobile endpoint {m_url}')
-                        return {
-                            "success": True,
-                            "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
-                            "method": "browser_mobile"
-                        }
+                        await asyncio.sleep(2.0)
+                    else:
+                        await page.evaluate("""(ta) => {
+                            const f = ta.closest('form');
+                            if (f) f.submit();
+                        }""", textarea)
+                        await asyncio.sleep(2.0)
+
+                    log_info('FB_PERSONAL_SEND', f'Successfully dispatched personal message via mobile endpoint {m_url}')
+                    return {
+                        "success": True,
+                        "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
+                        "method": "browser_mobile"
+                    }
             except Exception as mob_err:
                 log_warning('FB_PERSONAL_SEND', f'Mobile url {m_url} attempt error: {mob_err}')
                 continue
@@ -482,3 +526,123 @@ class FBPersonalSyncService:
             "success": False,
             "error": f"Không thể gửi tin nhắn đến Facebook ({clean_recipient}). Vui lòng kiểm tra lại liên kết trang cá nhân, tài khoản người nhận có thể chặn nhận tin nhắn từ người lạ, hoặc làm mới Cookie Facebook cá nhân."
         }
+
+    @classmethod
+    async def sync_conversation_history(cls, db: Session, conversation_id: int) -> int:
+        """
+        Syncs full recent message history for a specific conversation from Facebook.
+        """
+        conv = db.query(ChatConversation).filter(ChatConversation.id == conversation_id).first()
+        if not conv or not conv.contact:
+            return 0
+
+        clean_recipient = str(conv.contact.external_user_id or '').strip()
+        if not clean_recipient or clean_recipient.startswith("sim_") or clean_recipient.startswith("test_"):
+            return 0
+
+        if not browser_manager.is_running():
+            try:
+                await browser_manager.start()
+            except Exception:
+                return 0
+
+        page = await browser_manager.get_page()
+        synced_count = 0
+
+        try:
+            # Try mbasic first as it contains simple structured message history
+            m_url = f"https://mbasic.facebook.com/messages/read/?tid={clean_recipient}"
+            await page.goto(m_url, wait_until='domcontentloaded', timeout=15000)
+            await asyncio.sleep(1.5)
+
+            # Scrape messages from mbasic
+            extracted_messages = await page.evaluate("""
+                () => {
+                    const result = [];
+                    const msgGroup = document.querySelector('#messageGroup');
+                    if (!msgGroup) return result;
+
+                    const rows = msgGroup.querySelectorAll('div > div');
+                    rows.forEach(r => {
+                        const strong = r.querySelector('strong');
+                        if (!strong) return;
+                        const sender = strong.innerText.trim();
+                        const body = r.innerText.replace(sender, '').trim();
+                        if (body) {
+                            result.push({
+                                sender: sender,
+                                is_me: sender.toLowerCase() === 'bạn' || sender.toLowerCase() === 'you',
+                                content: body
+                            });
+                        }
+                    });
+                    return result;
+                }
+            """)
+
+            # If mbasic didn't return messages, try desktop
+            if not extracted_messages:
+                d_url = f"https://www.facebook.com/messages/t/{clean_recipient}"
+                await page.goto(d_url, wait_until='domcontentloaded', timeout=15000)
+                await asyncio.sleep(2)
+
+                extracted_messages = await page.evaluate("""
+                    () => {
+                        const result = [];
+                        const bubbles = document.querySelectorAll('div[role="main"] div[dir="auto"], div[data-scope="messages_table"] div[dir="auto"]');
+                        bubbles.forEach(b => {
+                            const text = b.innerText.trim();
+                            if (!text) return;
+                            const isMe = !!b.closest('[data-testid="outgoing_message"]');
+                            result.push({
+                                sender: isMe ? 'Tôi' : 'Khách',
+                                is_me: isMe,
+                                content: text
+                            });
+                        });
+                        return result;
+                    }
+                """)
+
+            # Save extracted messages to DB if not present
+            existing_contents = {
+                m.content.strip() for m in db.query(ChatMessage.content).filter(ChatMessage.conversation_id == conv.id).all()
+            }
+
+            for m_item in extracted_messages:
+                txt = m_item.get("content", "").strip()
+                if not txt or txt in existing_contents:
+                    continue
+
+                is_me = m_item.get("is_me", False)
+                sender_type = "AGENT" if is_me else "CONTACT"
+
+                msg = ChatMessage(
+                    conversation_id=conv.id,
+                    sender_type=sender_type,
+                    sender_name="Tôi" if is_me else conv.contact.name,
+                    sender_avatar="/assets/agent-avatar.png" if is_me else conv.contact.avatar_url,
+                    content=txt,
+                    message_type="TEXT",
+                    delivery_status="DELIVERED",
+                    external_message_id=f"fb_hist_{uuid.uuid4().hex[:8]}",
+                    is_inbound=not is_me,
+                    created_at=datetime.utcnow()
+                )
+                db.add(msg)
+                existing_contents.add(txt)
+                synced_count += 1
+
+                conv.last_message_text = txt
+                conv.last_message_at = datetime.utcnow()
+                conv.last_message_sender = sender_type
+
+            if synced_count > 0:
+                conv.updated_at = datetime.utcnow()
+                db.commit()
+                log_info('FB_PERSONAL_SYNC', f'Synced {synced_count} historical messages for conversation #{conversation_id}')
+
+        except Exception as e:
+            log_warning('FB_PERSONAL_SYNC', f'Error syncing conversation #{conversation_id} history: {e}')
+
+        return synced_count

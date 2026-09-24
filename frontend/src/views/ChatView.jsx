@@ -49,6 +49,7 @@ import {
   updateChatSettings,
   getFBPersonalStatus,
   syncFBPersonalMessages,
+  syncChatConversation,
   importFBPersonalCookies
 } from '../api';
 
@@ -88,6 +89,7 @@ export default function ChatView() {
   // Facebook Personal Sync
   const [fbPersonalStatus, setFbPersonalStatus] = useState(null);
   const [syncingFB, setSyncingFB] = useState(false);
+  const [syncingConversation, setSyncingConversation] = useState(false);
   const [fbSyncNotification, setFbSyncNotification] = useState(null);
 
   // CRM Contact editing
@@ -118,14 +120,38 @@ export default function ChatView() {
   useEffect(() => {
     fetchInitialData();
     fetchFBStatus();
+    let pollCount = 0;
     const interval = setInterval(() => {
+      pollCount++;
       fetchConversations(false);
       if (selectedConvId) {
         fetchConversationDetail(selectedConvId, false);
       }
+      // Periodically auto-sync FB Personal in background every 15s (every 3rd tick)
+      if (pollCount % 3 === 0 && (selectedChannelType === 'FB_PERSONAL' || fbPersonalStatus?.is_logged_in)) {
+        syncFBPersonalMessages().then(() => {
+          fetchConversations(false);
+          if (selectedConvId) fetchConversationDetail(selectedConvId, false);
+        }).catch(() => {});
+      }
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedChannelType, statusFilter, searchQuery]);
+
+  const handleSyncCurrentConversation = async () => {
+    if (!selectedConvId) return;
+    setSyncingConversation(true);
+    try {
+      const res = await syncChatConversation(selectedConvId);
+      setActiveConversation(res.data);
+      setMessages(res.data.messages || []);
+      await fetchConversations(false);
+    } catch (err) {
+      console.error('Lỗi làm mới hội thoại:', err);
+    } finally {
+      setSyncingConversation(false);
+    }
+  };
 
   const fetchFBStatus = async () => {
     try {
@@ -701,6 +727,17 @@ export default function ChatView() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  {activeConversation.channel_type === 'FB_PERSONAL' && (
+                    <button
+                      onClick={handleSyncCurrentConversation}
+                      disabled={syncingConversation}
+                      className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold shadow-sm transition"
+                      title="Lấy tin nhắn mới nhất trực tiếp từ Facebook cá nhân"
+                    >
+                      <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${syncingConversation ? 'animate-spin' : ''}`} />
+                      {syncingConversation ? 'Đang đồng bộ...' : 'Làm mới từ FB'}
+                    </button>
+                  )}
                   <button
                     onClick={handleGetAiSuggestions}
                     disabled={aiLoading}

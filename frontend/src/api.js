@@ -184,6 +184,7 @@ export const updateChatSettings = (data) => api.put('/chat/settings', data);
 // Facebook Personal Synchronization
 export const getFBPersonalStatus = () => api.get('/chat/channels/fb-personal/status');
 export const syncFBPersonalMessages = () => api.post('/chat/channels/fb-personal/sync');
+export const syncChatConversation = (id) => api.post(`/chat/conversations/${id}/sync`);
 export const importFBPersonalCookies = (cookies) => api.post('/chat/channels/fb-personal/cookies', { cookies });
 
 export default api;
