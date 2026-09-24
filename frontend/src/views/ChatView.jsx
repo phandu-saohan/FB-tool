@@ -46,7 +46,10 @@ import {
   createChatQuickReply,
   simulateIncomingChatMessage,
   getChatSettings,
-  updateChatSettings
+  updateChatSettings,
+  getFBPersonalStatus,
+  syncFBPersonalMessages,
+  importFBPersonalCookies
 } from '../api';
 
 export default function ChatView() {
@@ -78,7 +81,14 @@ export default function ChatView() {
   const [showSimulateModal, setShowSimulateModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showQuickReplyModal, setShowQuickReplyModal] = useState(false);
+  const [showFBCookieModal, setShowFBCookieModal] = useState(false);
+  const [fbCookieInput, setFbCookieInput] = useState('');
   const [copiedWebhook, setCopiedWebhook] = useState(false);
+
+  // Facebook Personal Sync
+  const [fbPersonalStatus, setFbPersonalStatus] = useState(null);
+  const [syncingFB, setSyncingFB] = useState(false);
+  const [fbSyncNotification, setFbSyncNotification] = useState(null);
 
   // CRM Contact editing
   const [newTagInput, setNewTagInput] = useState('');
@@ -107,6 +117,7 @@ export default function ChatView() {
   // Load initial data
   useEffect(() => {
     fetchInitialData();
+    fetchFBStatus();
     const interval = setInterval(() => {
       fetchConversations(false);
       if (selectedConvId) {
@@ -115,6 +126,57 @@ export default function ChatView() {
     }, 5000);
     return () => clearInterval(interval);
   }, [selectedChannelType, statusFilter, searchQuery]);
+
+  const fetchFBStatus = async () => {
+    try {
+      const res = await getFBPersonalStatus();
+      setFbPersonalStatus(res.data);
+    } catch (err) {
+      console.error('Lỗi lấy trạng thái FB cá nhân:', err);
+    }
+  };
+
+  const handleSyncFBPersonal = async () => {
+    setSyncingFB(true);
+    setFbSyncNotification({ type: 'info', text: 'Đang kết nối trình duyệt & quét tin nhắn Facebook cá nhân...' });
+    try {
+      const res = await syncFBPersonalMessages();
+      if (res.data.success) {
+        setFbSyncNotification({ type: 'success', text: res.data.message });
+        await fetchConversations(false);
+        await fetchFBStatus();
+      } else {
+        setFbSyncNotification({ type: 'warning', text: res.data.message });
+      }
+    } catch (err) {
+      setFbSyncNotification({
+        type: 'error',
+        text: 'Lỗi đồng bộ FB cá nhân: ' + (err.response?.data?.detail || err.message)
+      });
+    } finally {
+      setSyncingFB(false);
+      setTimeout(() => setFbSyncNotification(null), 6000);
+    }
+  };
+
+  const handleImportFBCookiesSubmit = async (e) => {
+    e.preventDefault();
+    if (!fbCookieInput.trim()) return;
+    setSyncingFB(true);
+    try {
+      const res = await importFBPersonalCookies(fbCookieInput.trim());
+      setShowFBCookieModal(false);
+      setFbCookieInput('');
+      setFbSyncNotification({ type: 'success', text: res.data.message });
+      await fetchConversations(false);
+      await fetchFBStatus();
+    } catch (err) {
+      alert('Lỗi nhập cookie: ' + (err.response?.data?.detail || err.message));
+    } finally {
+      setSyncingFB(false);
+      setTimeout(() => setFbSyncNotification(null), 6000);
+    }
+  };
 
   const fetchInitialData = async () => {
     setLoading(true);
@@ -379,6 +441,16 @@ export default function ChatView() {
           </div>
 
           <button
+            onClick={handleSyncFBPersonal}
+            disabled={syncingFB}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 rounded-lg text-xs font-semibold transition shadow-sm"
+            title="Quét và đồng bộ tin nhắn Facebook cá nhân từ trình duyệt"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-blue-600 ${syncingFB ? 'animate-spin' : ''}`} />
+            {syncingFB ? 'Đang đồng bộ...' : 'Đồng bộ FB Cá nhân'}
+          </button>
+
+          <button
             onClick={() => setShowSimulateModal(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 rounded-lg text-xs font-semibold transition shadow-sm"
           >
@@ -393,6 +465,40 @@ export default function ChatView() {
           </button>
         </div>
       </div>
+
+      {/* Sync Notification Banner */}
+      {fbSyncNotification && (
+        <div className={`px-6 py-2 text-xs flex items-center justify-between border-b transition-all ${
+          fbSyncNotification.type === 'success'
+            ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+            : fbSyncNotification.type === 'error'
+            ? 'bg-rose-50 text-rose-800 border-rose-200'
+            : fbSyncNotification.type === 'warning'
+            ? 'bg-amber-50 text-amber-800 border-amber-200'
+            : 'bg-blue-50 text-blue-800 border-blue-200'
+        }`}>
+          <div className="flex items-center gap-2">
+            <RefreshCw className={`w-3.5 h-3.5 ${syncingFB ? 'animate-spin text-blue-600' : 'text-current'}`} />
+            <span className="font-medium">{fbSyncNotification.text}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            {!fbPersonalStatus?.is_logged_in && (
+              <button
+                onClick={() => setShowFBCookieModal(true)}
+                className="px-2.5 py-1 bg-white hover:bg-slate-50 border border-slate-300 rounded font-semibold text-slate-800 shadow-2xs"
+              >
+                Nhập Cookie FB
+              </button>
+            )}
+            <button
+              onClick={() => setFbSyncNotification(null)}
+              className="text-slate-400 hover:text-slate-600 font-bold px-1"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 3-Column Layout */}
       <div className="flex-1 flex overflow-hidden">
@@ -448,6 +554,45 @@ export default function ChatView() {
                 className="w-full pl-9 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
               />
             </div>
+
+            {/* FB Personal Sync Status Card (Visible when FB_PERSONAL tab selected) */}
+            {selectedChannelType === 'FB_PERSONAL' && (
+              <div className="mt-3 p-3 bg-indigo-50/90 border border-indigo-200 rounded-xl text-xs">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="font-bold text-indigo-950 flex items-center gap-1.5">
+                    <User className="w-3.5 h-3.5 text-indigo-600" /> Facebook Cá Nhân
+                  </span>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold border ${
+                    fbPersonalStatus?.is_logged_in
+                      ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                      : 'bg-amber-100 text-amber-800 border-amber-300'
+                  }`}>
+                    {fbPersonalStatus?.is_logged_in ? 'Đang kết nối' : 'Chưa đăng nhập'}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-600 mb-2.5 leading-relaxed">
+                  {fbPersonalStatus?.is_logged_in
+                    ? `Đang đồng bộ qua trình duyệt (UID: ${fbPersonalStatus.facebook_uid || 'Profile chính'}).`
+                    : 'Đăng nhập trên trình duyệt hoặc dán Cookie Facebook cá nhân để đồng bộ tin nhắn.'}
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSyncFBPersonal}
+                    disabled={syncingFB}
+                    className="flex-1 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold text-xs shadow-2xs flex items-center justify-center gap-1.5 transition"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${syncingFB ? 'animate-spin' : ''}`} />
+                    {syncingFB ? 'Đang đồng bộ...' : 'Đồng bộ ngay'}
+                  </button>
+                  <button
+                    onClick={() => setShowFBCookieModal(true)}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-50 border border-indigo-200 text-indigo-900 rounded-lg font-semibold text-xs shadow-2xs transition"
+                  >
+                    Nhập Cookie
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Conversations Scrollable List */}
@@ -1065,6 +1210,67 @@ export default function ChatView() {
                 Đóng
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: Nhập Cookie Facebook Cá Nhân */}
+      {showFBCookieModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl">
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-slate-900 text-base flex items-center gap-2">
+                <User className="w-5 h-5 text-indigo-600" /> Nhập Cookie Facebook Cá Nhân
+              </h3>
+              <button
+                onClick={() => setShowFBCookieModal(false)}
+                className="text-slate-400 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleImportFBCookiesSubmit} className="space-y-4 text-xs">
+              <div className="p-3 bg-indigo-50/70 border border-indigo-200/80 rounded-xl text-slate-700 leading-relaxed">
+                <p className="font-semibold text-indigo-950 mb-1">💡 Hướng dẫn lấy Cookie an toàn:</p>
+                <p>1. Cài tiện ích <b>Cookie-Editor</b> trên trình duyệt Chrome.</p>
+                <p>2. Đăng nhập vào <a href="https://facebook.com" target="_blank" rel="noreferrer" className="text-blue-600 underline">facebook.com</a> cá nhân.</p>
+                <p>3. Bấm icon Cookie-Editor ➔ chọn <b>Export</b> ➔ <b>Export as JSON</b> (hoặc Header String).</p>
+                <p>4. Dán toàn bộ nội dung vào khung bên dưới và bấm <b>Lưu & Đồng bộ ngay</b>.</p>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Chuỗi Cookie JSON hoặc chuỗi c_user=...; xs=...
+                </label>
+                <textarea
+                  rows={5}
+                  value={fbCookieInput}
+                  onChange={(e) => setFbCookieInput(e.target.value)}
+                  placeholder='Dán JSON cookie: [{"name":"c_user","value":"1000..."}, ...] hoặc c_user=...; xs=...'
+                  className="w-full p-3 font-mono text-[11px] bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:border-indigo-500 resize-none"
+                  required
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowFBCookieModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-medium"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={syncingFB || !fbCookieInput.trim()}
+                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-semibold shadow-md disabled:opacity-50 transition flex items-center gap-1.5"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${syncingFB ? 'animate-spin' : ''}`} />
+                  {syncingFB ? 'Đang lưu & Quét...' : 'Lưu & Đồng bộ ngay'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

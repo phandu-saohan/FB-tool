@@ -32,10 +32,16 @@ from app.schemas.chat_schemas import (
     ChatStatsResponse,
     SimulateIncomingRequest,
     AISuggestRequest,
-    AISuggestResponse
+    AISuggestResponse,
+    FBCookiesImportRequest,
+    FBPersonalStatusResponse,
+    FBPersonalSyncResponse
 )
 from app.services.chat.omnichannel_service import OmnichannelService
 from app.services.chat.chat_ai_service import ChatAIService
+from app.services.chat.fb_personal_sync_service import FBPersonalSyncService
+from app.api.browser import parse_cookie_input
+from app.automation.browser_manager import browser_manager
 
 router = APIRouter(prefix="/api/chat", tags=["Omnichannel Chat"])
 
@@ -136,6 +142,42 @@ def delete_channel(id: int, db: Session = Depends(get_db)):
     db.delete(ch)
     db.commit()
     return {"message": "Đã xóa kênh thành công"}
+
+
+# ---------------------------------------------------------------------------
+# FACEBOOK PERSONAL SYNC & COOKIES
+# ---------------------------------------------------------------------------
+
+@router.get("/channels/fb-personal/status", response_model=FBPersonalStatusResponse)
+async def get_fb_personal_status(db: Session = Depends(get_db)):
+    return await FBPersonalSyncService.get_connection_status(db)
+
+@router.post("/channels/fb-personal/sync", response_model=FBPersonalSyncResponse)
+async def sync_fb_personal_messages(db: Session = Depends(get_db)):
+    try:
+        result = await FBPersonalSyncService.sync_messages(db)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi đồng bộ tin nhắn FB cá nhân: {e}")
+
+@router.post("/channels/fb-personal/cookies", response_model=FBPersonalSyncResponse)
+async def import_fb_personal_cookies(req: FBCookiesImportRequest, db: Session = Depends(get_db)):
+    parsed_cookies = parse_cookie_input(req.cookies)
+    if not parsed_cookies:
+        raise HTTPException(status_code=400, detail="Cookie không đúng định dạng JSON hoặc chuỗi c_user=...; xs=...")
+
+    try:
+        if not browser_manager.is_running():
+            await browser_manager.start()
+
+        # Add cookies to persistent browser context
+        await browser_manager.context.add_cookies(parsed_cookies)
+
+        # Trigger sync immediately
+        result = await FBPersonalSyncService.sync_messages(db)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Lỗi nhập cookie FB cá nhân: {e}")
 
 
 # ---------------------------------------------------------------------------

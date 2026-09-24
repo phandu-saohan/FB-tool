@@ -12,9 +12,19 @@ class FBPersonalConnector(BaseChatConnector):
     """
 
     def send_message(self, recipient_id: str, content: str, media_url: Optional[str] = None) -> Dict[str, Any]:
-        # Connects with active browser profile session or direct payload
         msg_id = f"fb_pers_mid_{uuid.uuid4().hex[:12]}"
         logger.info(f"[FB_PERSONAL] Sent message from personal profile to user {recipient_id}: {content[:30]}...")
+
+        # If browser loop is running, trigger direct browser dispatch
+        try:
+            from app.services.chat.fb_personal_sync_service import FBPersonalSyncService
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(FBPersonalSyncService.send_message_via_browser(recipient_id, content))
+        except Exception as e:
+            logger.debug(f"[FB_PERSONAL] Browser dispatch background task: {e}")
+
         return {
             "success": True,
             "message_id": msg_id,

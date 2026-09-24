@@ -197,3 +197,23 @@ class AISuggestResponse(BaseModel):
     suggestions: List[str]
     detected_intent: Optional[str] = None
     recommended_tags: List[str] = []
+
+class FBCookiesImportRequest(BaseModel):
+    cookies: str
+
+class FBPersonalStatusResponse(BaseModel):
+    channel_id: Optional[int] = None
+    channel_name: str
+    is_browser_running: bool
+    is_logged_in: bool
+    facebook_uid: Optional[str] = None
+    status: str
+    synced_conversations_count: int
+    last_synced_at: Optional[str] = None
+
+class FBPersonalSyncResponse(BaseModel):
+    success: bool
+    synced_count: int
+    is_logged_in: bool
+    message: str
+
