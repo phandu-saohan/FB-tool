@@ -830,6 +830,42 @@ export default function ChatView() {
 
               {/* Composer Input Area */}
               <div className="bg-white border-t border-slate-200 p-4">
+                {/* Facebook Personal Session Banner */}
+                {activeConversation.channel_type === 'FB_PERSONAL' && (
+                  fbPersonalStatus?.is_logged_in ? (
+                    <div className="mb-2 px-3 py-1.5 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center justify-between text-[11px] text-emerald-800">
+                      <span className="flex items-center gap-1.5 font-medium">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
+                        Đang kết nối Facebook cá nhân (UID: {fbPersonalStatus.facebook_uid || 'Active'}) • Tin nhắn gửi trực tiếp tới Messenger của khách
+                      </span>
+                      <button
+                        onClick={handleSyncFBPersonal}
+                        disabled={syncingFB}
+                        className="text-emerald-900 font-semibold hover:underline flex items-center gap-1"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${syncingFB ? 'animate-spin' : ''}`} />
+                        Đồng bộ
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="mb-2.5 p-2.5 bg-amber-50 border border-amber-300 rounded-xl flex items-center justify-between text-xs text-amber-900">
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                        <div>
+                          <p className="font-bold">Chưa kết nối Facebook cá nhân!</p>
+                          <p className="text-[11px] text-amber-800">Cần đăng nhập trên trình duyệt hoặc dán Cookie để gửi tin nhắn thực tế tới Messenger.</p>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => setShowFBCookieModal(true)}
+                        className="px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-2xs shrink-0 transition"
+                      >
+                        Nhập Cookie FB
+                      </button>
+                    </div>
+                  )
+                )}
+
                 {showMediaInput && (
                   <div className="mb-2 flex items-center gap-2 bg-slate-50 p-2 rounded-lg border border-slate-200">
                     <ImageIcon className="w-4 h-4 text-slate-500" />

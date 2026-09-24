@@ -325,9 +325,9 @@ def mark_conversation_as_read(id: int, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 @router.post("/conversations/{id}/messages", response_model=ChatMessageResponse)
-def send_message(id: int, msg_in: ChatMessageCreate, db: Session = Depends(get_db)):
+async def send_message(id: int, msg_in: ChatMessageCreate, db: Session = Depends(get_db)):
     try:
-        msg = OmnichannelService.send_outbound_message(
+        msg = await OmnichannelService.send_outbound_message(
             db=db,
             conversation_id=id,
             content=msg_in.content,
@@ -337,7 +337,7 @@ def send_message(id: int, msg_in: ChatMessageCreate, db: Session = Depends(get_d
         )
         return msg
     except ValueError as e:
-        raise HTTPException(status_code=404, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Lỗi gửi tin nhắn: {e}")
 

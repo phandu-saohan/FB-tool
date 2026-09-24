@@ -50,7 +50,7 @@ class OmnichannelService:
             return FBPageConnector(cfg)
 
     @classmethod
-    def send_outbound_message(
+    async def send_outbound_message(
         cls,
         db: Session,
         conversation_id: int,
@@ -68,11 +68,40 @@ class OmnichannelService:
 
         # Route outbound message via platform connector
         connector = cls.get_connector(channel)
-        result = connector.send_message(
-            recipient_id=contact.external_user_id or contact.phone or "user",
-            content=content,
-            media_url=media_url
-        )
+        import inspect
+        if inspect.iscoroutinefunction(connector.send_message):
+            result = await connector.send_message(
+                recipient_id=contact.external_user_id or contact.phone or "user",
+                content=content,
+                media_url=media_url
+            )
+        else:
+            result = connector.send_message(
+                recipient_id=contact.external_user_id or contact.phone or "user",
+                content=content,
+                media_url=media_url
+            )
+
+        if not result.get("success"):
+            error_msg = result.get("error") or "Không thể gửi tin nhắn qua kênh này"
+            # Record failed message in database
+            fail_msg = ChatMessage(
+                conversation_id=conv.id,
+                sender_type="AGENT",
+                sender_name=sender_name or "Chuyên viên tư vấn",
+                sender_avatar="/assets/agent-avatar.png",
+                content=content,
+                message_type=message_type,
+                media_url=media_url,
+                delivery_status="FAILED",
+                error_message=error_msg,
+                is_inbound=False,
+                created_at=datetime.utcnow()
+            )
+            db.add(fail_msg)
+            db.commit()
+            db.refresh(fail_msg)
+            raise ValueError(error_msg)
 
         # Create message record
         msg = ChatMessage(
@@ -83,9 +112,9 @@ class OmnichannelService:
             content=content,
             message_type=message_type,
             media_url=media_url,
-            delivery_status="SENT" if result.get("success") else "FAILED",
+            delivery_status="SENT",
             external_message_id=result.get("message_id"),
-            error_message=result.get("error"),
+            error_message=None,
             is_inbound=False,
             created_at=datetime.utcnow()
         )

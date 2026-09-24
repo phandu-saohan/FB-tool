@@ -285,38 +285,124 @@ class FBPersonalSyncService:
         """
         Sends an outbound personal message by typing directly into the active browser session.
         """
-        if not browser_manager.is_running():
+        clean_recipient = str(recipient_id).strip()
+        if "/messages/t/" in clean_recipient:
+            clean_recipient = clean_recipient.split("/messages/t/")[-1].strip("/")
+
+        # Allow instant mock dispatch for testing and simulation contacts
+        if clean_recipient.startswith("sim_") or clean_recipient.startswith("test_"):
             return {
                 "success": True,
-                "message_id": f"fb_pers_{uuid.uuid4().hex[:12]}",
-                "method": "queued",
-                "note": "Trình duyệt đang tắt, tin nhắn đã được lưu vào hệ thống."
+                "message_id": f"fb_pers_sim_{uuid.uuid4().hex[:10]}",
+                "method": "simulated_test"
             }
 
+        # 1. Start browser if stopped
+        if not browser_manager.is_running():
+            try:
+                await browser_manager.start()
+            except Exception as e:
+                return {
+                    "success": False,
+                    "error": f"Không thể khởi động trình duyệt: {e}. Vui lòng mở Trình duyệt trên Dashboard hoặc dán Cookie Facebook cá nhân."
+                }
+
+        # 2. Check if logged in (c_user cookie)
+        try:
+            cookies = await browser_manager.context.cookies(['https://www.facebook.com'])
+            c_user = any(c.get('name') == 'c_user' for c in cookies)
+            if not c_user:
+                return {
+                    "success": False,
+                    "error": "Tài khoản Facebook cá nhân chưa đăng nhập. Vui lòng bấm nút 'Nhập Cookie' trong tab FB Cá Nhân hoặc mở Trình duyệt trên Dashboard để đăng nhập."
+                }
+        except Exception as e:
+            return {
+                "success": False,
+                "error": f"Lỗi kiểm tra phiên đăng nhập Facebook: {e}"
+            }
+
+        # 3. Navigate to Messenger conversation
         try:
             page = await browser_manager.get_page()
-            url = f"https://www.facebook.com/messages/t/{recipient_id}"
+            url = f"https://www.facebook.com/messages/t/{clean_recipient}"
             log_info('FB_PERSONAL_SEND', f'Navigating to conversation {url}...')
-            await page.goto(url, wait_until='domcontentloaded', timeout=20000)
+            await page.goto(url, wait_until='domcontentloaded', timeout=25000)
             await asyncio.sleep(2)
 
-            # Find message box: div[role="textbox"] or p.xat24cr
-            msg_box = await page.query_selector('div[role="textbox"], p.xat24cr, div[aria-label*="Tin nhắn"], div[aria-label*="Message"]')
+            # Try to find message input box (Lexical editor div[role="textbox"])
+            msg_box = None
+            selectors = [
+                'div[role="textbox"][contenteditable="true"]',
+                'div[role="textbox"]',
+                'div[aria-label*="Tin nhắn"][contenteditable="true"]',
+                'div[aria-label*="Message"][contenteditable="true"]',
+                'p.xat24cr'
+            ]
+            for sel in selectors:
+                try:
+                    msg_box = await page.wait_for_selector(sel, timeout=3000)
+                    if msg_box:
+                        break
+                except Exception:
+                    continue
+
             if msg_box:
                 await msg_box.click()
-                await msg_box.fill(content)
+                await asyncio.sleep(0.3)
+                # Type characters one by one so Lexical react state updates
+                await page.keyboard.type(content, delay=15)
+                await asyncio.sleep(0.5)
                 await page.keyboard.press('Enter')
-                log_info('FB_PERSONAL_SEND', f'Successfully typed and sent message to {recipient_id}')
+                await asyncio.sleep(1.5)
+
+                # Check if explicit send button exists
+                send_buttons = [
+                    'div[aria-label="Nhấn Enter để gửi"]',
+                    'div[aria-label="Send"]',
+                    'svg[aria-label="Nhấn Enter để gửi"]'
+                ]
+                for btn_sel in send_buttons:
+                    btn = await page.query_selector(btn_sel)
+                    if btn:
+                        try:
+                            await btn.click()
+                            await asyncio.sleep(0.5)
+                            break
+                        except Exception:
+                            pass
+
+                log_info('FB_PERSONAL_SEND', f'Successfully dispatched message to Facebook user {clean_recipient}')
                 return {
                     "success": True,
                     "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
-                    "method": "browser_live"
+                    "method": "browser_desktop"
                 }
-        except Exception as e:
-            log_warning('FB_PERSONAL_SEND', f'Direct browser sending exception: {e}')
 
-        return {
-            "success": True,
-            "message_id": f"fb_pers_{uuid.uuid4().hex[:12]}",
-            "method": "simulated_dispatch"
-        }
+            # Fallback to mobile site m.facebook.com
+            log_info('FB_PERSONAL_SEND', f'Trying mobile fallback https://m.facebook.com/messages/read/?tid={clean_recipient}...')
+            await page.goto(f"https://m.facebook.com/messages/read/?tid={clean_recipient}", wait_until='domcontentloaded', timeout=20000)
+            await asyncio.sleep(2)
+            textarea = await page.query_selector('textarea[name="body"], textarea')
+            if textarea:
+                await textarea.fill(content)
+                send_sub = await page.query_selector('input[name="send"], button[name="send"], input[type="submit"]')
+                if send_sub:
+                    await send_sub.click()
+                    await asyncio.sleep(1)
+                    return {
+                        "success": True,
+                        "message_id": f"fb_pers_live_{uuid.uuid4().hex[:10]}",
+                        "method": "browser_mobile"
+                    }
+
+            return {
+                "success": False,
+                "error": f"Không thể tìm thấy khung soạn tin nhắn trên trang Facebook của người nhận ({clean_recipient})."
+            }
+        except Exception as e:
+            log_error('FB_PERSONAL_SEND', f'Error dispatching personal message: {e}')
+            return {
+                "success": False,
+                "error": f"Lỗi thao tác trình duyệt khi gửi tin Facebook cá nhân: {e}"
+            }
