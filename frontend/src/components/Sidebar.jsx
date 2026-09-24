@@ -10,6 +10,7 @@ import {
   Terminal, 
   Settings,
   ShieldAlert,
+  Bot,
   MessageSquareText,
   Mail,
   MessageCircle,
