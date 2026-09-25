@@ -516,6 +516,7 @@ class ZaloSetting(Base):
     bot_token = Column(String(255), nullable=True)
     bot_name = Column(String(255), nullable=True)
     bot_username = Column(String(255), nullable=True)
+    bot_webhook_secret = Column(String(255), nullable=True)
     daily_limit = Column(Integer, default=50)
     min_delay_seconds = Column(Integer, default=15)
     max_delay_seconds = Column(Integer, default=45)

@@ -155,7 +155,7 @@ export const generateZaloAIPost = (data) => api.post('/zalo/ai/generate', data);
 export const getZaloSettings = () => api.get('/zalo/settings');
 export const updateZaloSettings = (data) => api.put('/zalo/settings', data);
 export const testZaloBotToken = (bot_token) => api.post('/zalo/bot/test', { bot_token });
-export const setZaloBotWebhook = (webhook_url) => api.post('/zalo/bot/set-webhook', { webhook_url });
+export const setZaloBotWebhook = (webhook_url, secret_token) => api.post('/zalo/bot/set-webhook', { webhook_url, secret_token });
 
 // ---------------------------------------------------------------------------
 // Omnichannel Chat API Methods (FB Page, FB Personal, Zalo, WhatsApp)

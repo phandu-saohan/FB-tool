@@ -99,13 +99,15 @@ class ZaloBotService:
             }
 
     @classmethod
-    async def set_webhook(cls, bot_token: str, webhook_url: str) -> Dict[str, Any]:
+    async def set_webhook(cls, bot_token: str, webhook_url: str, secret_token: Optional[str] = None) -> Dict[str, Any]:
         """
-        Register a public webhook URL with Zalo Bot Platform.
+        Register a public webhook URL with Zalo Bot Platform, optionally with secret_token.
         """
         clean_tok = cls.clean_token(bot_token)
         url = f"{cls.BASE_URL}/bot{clean_tok}/setWebhook"
         payload = {"url": webhook_url}
+        if secret_token and secret_token.strip():
+            payload["secret_token"] = secret_token.strip()
         try:
             async with httpx.AsyncClient(timeout=15.0) as client:
                 res = await client.post(url, json=payload)

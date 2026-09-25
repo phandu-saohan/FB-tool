@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Query, BackgroundTasks, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List, Optional, Dict, Any
@@ -342,20 +342,41 @@ def verify_zalo_bot_webhook():
     return {"status": "ok", "message": "Zalo Bot Webhook endpoint is live and ready."}
 
 @router.post("/bot/webhook")
-async def receive_zalo_bot_webhook(update: Dict[str, Any], db: Session = Depends(get_db)):
+async def receive_zalo_bot_webhook(
+    request: Request,
+    update: Dict[str, Any],
+    secret_token: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     Receives events from Zalo Bot Platform webhook.
-    Automatically captures group chats and synchronizes incoming messages.
+    Validates Secret Token if configured, automatically captures group chats and synchronizes incoming messages.
     """
+    setting = zalo_worker.get_or_create_settings(db)
+    if setting.bot_webhook_secret and setting.bot_webhook_secret.strip():
+        # Check standard headers used by Bot platforms
+        header_token = (
+            request.headers.get("x-bot-api-secret-token") or
+            request.headers.get("x-telegram-bot-api-secret-token") or
+            request.headers.get("x-zalo-bot-api-secret-token") or
+            request.headers.get("x-secret-token") or
+            secret_token
+        )
+        if not header_token or header_token.strip() != setting.bot_webhook_secret.strip():
+            log_warning("ZALO_BOT", f"Webhook unauthorized attempt: missing or invalid Secret Token.")
+            raise HTTPException(status_code=403, detail="Forbidden: Invalid or missing Secret Token")
+
     res = ZaloBotService.handle_webhook_update(db, update)
     return res
 
 @router.post("/bot/set-webhook")
-async def set_zalo_bot_webhook(payload: Dict[str, str], db: Session = Depends(get_db)):
+async def set_zalo_bot_webhook(payload: Dict[str, Any], db: Session = Depends(get_db)):
     """
-    Registers this server's public webhook with Zalo Bot Platform.
+    Registers this server's public webhook with Zalo Bot Platform with optional Secret Token.
     """
     webhook_url = payload.get("webhook_url", "").strip()
+    secret_token = payload.get("secret_token", "").strip()
+
     if not webhook_url:
         raise HTTPException(status_code=400, detail="Vui lòng cung cấp URL webhook.")
 
@@ -363,6 +384,12 @@ async def set_zalo_bot_webhook(payload: Dict[str, str], db: Session = Depends(ge
     if not setting.bot_token:
         raise HTTPException(status_code=400, detail="Chưa có Zalo Bot Token. Vui lòng nhập và lưu Bot Token trước.")
 
-    res = await ZaloBotService.set_webhook(setting.bot_token, webhook_url)
+    if not secret_token and setting.bot_webhook_secret:
+        secret_token = setting.bot_webhook_secret
+
+    res = await ZaloBotService.set_webhook(setting.bot_token, webhook_url, secret_token)
+    if res.get("success"):
+        setting.bot_webhook_secret = secret_token or None
+        db.commit()
     return res
 

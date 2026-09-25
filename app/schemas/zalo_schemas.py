@@ -137,6 +137,7 @@ class ZaloSettingResponse(BaseModel):
     bot_token: Optional[str] = None
     bot_name: Optional[str] = None
     bot_username: Optional[str] = None
+    bot_webhook_secret: Optional[str] = None
     daily_limit: int = 50
     min_delay_seconds: int = 15
     max_delay_seconds: int = 45
@@ -154,6 +155,7 @@ class ZaloSettingUpdate(BaseModel):
     bot_token: Optional[str] = None
     bot_name: Optional[str] = None
     bot_username: Optional[str] = None
+    bot_webhook_secret: Optional[str] = None
     session_cookie: Optional[str] = None
     oa_secret_key: Optional[str] = None
     oa_access_token: Optional[str] = None

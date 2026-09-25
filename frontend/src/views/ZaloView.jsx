@@ -24,7 +24,9 @@ import {
   Tag,
   Bot,
   ShieldCheck,
-  Link2
+  Link2,
+  Copy,
+  Key
 } from 'lucide-react';
 import {
   getZaloDashboard,
@@ -110,6 +112,8 @@ export default function ZaloView() {
   const [botTestResult, setBotTestResult] = useState(null);
   const [settingWebhook, setSettingWebhook] = useState(false);
   const [webhookResult, setWebhookResult] = useState(null);
+  const [webhookUrlInput, setWebhookUrlInput] = useState('');
+  const [copiedField, setCopiedField] = useState('');
 
   // Pagination
   const paginatedGroups = usePagination(groups, 8);
@@ -150,6 +154,10 @@ export default function ZaloView() {
     try {
       const res = await getZaloSettings();
       setSettings(res.data);
+      const defaultHost = window.location.origin.includes('localhost')
+        ? 'https://fb.medicalcenter.vn'
+        : window.location.origin;
+      setWebhookUrlInput(`${defaultHost}/api/zalo/bot/webhook`);
     } catch (err) {
       console.error(err);
     }
@@ -419,18 +427,39 @@ export default function ZaloView() {
     }
   };
 
+  // Generate random secret token
+  const generateRandomSecret = () => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    let result = '';
+    for (let i = 0; i < 32; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    setSettings(prev => ({ ...prev, bot_webhook_secret: result }));
+  };
+
+  // Copy helper
+  const copyToClipboard = (text, fieldName) => {
+    if (!text) return;
+    navigator.clipboard.writeText(text);
+    setCopiedField(fieldName);
+    setTimeout(() => setCopiedField(''), 2500);
+  };
+
   // Set Zalo Bot Webhook
   const handleSetWebhook = async () => {
     if (!settings?.bot_token?.trim()) {
       alert('Vui lòng nhập và lưu Zalo Bot Token trước.');
       return;
     }
+    const finalUrl = webhookUrlInput.trim() || `${window.location.origin}/api/zalo/bot/webhook`;
     setSettingWebhook(true);
     setWebhookResult(null);
     try {
-      const webhookUrl = `${window.location.origin}/api/zalo/bot/webhook`;
-      const res = await setZaloBotWebhook(webhookUrl);
+      const res = await setZaloBotWebhook(finalUrl, settings?.bot_webhook_secret?.trim() || null);
       setWebhookResult(res.data);
+      if (res.data?.success) {
+        alert('Kích hoạt Webhook thành công!');
+      }
     } catch (err) {
       setWebhookResult({
         success: false,
@@ -1298,23 +1327,87 @@ export default function ZaloView() {
                 </div>
               )}
 
-              {/* Webhook Configuration */}
-              <div className="pt-2 border-t border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              {/* Webhook & Secret Token Configuration */}
+              <div className="pt-3 border-t border-purple-100 space-y-3">
+                <div className="font-semibold text-slate-800 flex items-center justify-between">
+                  <span>Cấu hình Webhook & Bí mật xác thực (Secret Token)</span>
+                  <span className="text-[10px] text-purple-600 bg-purple-100/60 px-2 py-0.5 rounded-full font-medium">
+                    Bảo mật 2 chiều
+                  </span>
+                </div>
+
+                {/* Webhook URL Input with Copy button */}
                 <div>
-                  <span className="font-semibold text-slate-800">Webhook nhận tin & tự động bắt nhóm:</span>
-                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
-                    {window.location.origin}/api/zalo/bot/webhook
+                  <label className="text-slate-600 block mb-1 font-medium">
+                    Webhook URL (Nhận tin nhắn & tự động bắt nhóm)
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={webhookUrlInput}
+                      onChange={(e) => setWebhookUrlInput(e.target.value)}
+                      placeholder="https://fb.medicalcenter.vn/api/zalo/bot/webhook"
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono text-[11px] focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => copyToClipboard(webhookUrlInput, 'url')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition flex items-center space-x-1 shrink-0"
+                      title="Copy Webhook URL"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedField === 'url' ? 'Đã copy!' : 'Copy URL'}</span>
+                    </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  disabled={settingWebhook || !settings.bot_token}
-                  onClick={handleSetWebhook}
-                  className="px-3.5 py-1.5 bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 font-semibold rounded-xl transition self-start sm:self-auto flex items-center space-x-1.5 shadow-2xs"
-                >
-                  <Link2 className="w-3.5 h-3.5" />
-                  <span>{settingWebhook ? 'Đang thiết lập...' : 'Kích hoạt Webhook'}</span>
-                </button>
+
+                {/* Secret Token Input with Generate & Copy buttons */}
+                <div>
+                  <label className="text-slate-600 block mb-1 font-medium flex items-center justify-between">
+                    <span className="flex items-center space-x-1">
+                      <Key className="w-3.5 h-3.5 text-amber-500" />
+                      <span>Secret Token (Khóa xác thực bí mật Webhook)</span>
+                    </span>
+                    <button
+                      type="button"
+                      onClick={generateRandomSecret}
+                      className="text-purple-600 hover:text-purple-800 font-semibold underline text-[11px]"
+                    >
+                      🎲 Tạo ngẫu nhiên
+                    </button>
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={settings.bot_webhook_secret || ''}
+                      onChange={(e) => setSettings({ ...settings, bot_webhook_secret: e.target.value })}
+                      placeholder="Nhập chuỗi bí mật hoặc bấm Tạo ngẫu nhiên..."
+                      className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono text-[11px] focus:outline-none focus:border-purple-500"
+                    />
+                    <button
+                      type="button"
+                      disabled={!settings.bot_webhook_secret}
+                      onClick={() => copyToClipboard(settings.bot_webhook_secret, 'secret')}
+                      className="px-3 py-2 bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 font-semibold rounded-xl transition flex items-center space-x-1 shrink-0"
+                      title="Copy Secret Token"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      <span>{copiedField === 'secret' ? 'Đã copy!' : 'Copy Secret'}</span>
+                    </button>
+                    <button
+                      type="button"
+                      disabled={settingWebhook || !settings.bot_token}
+                      onClick={handleSetWebhook}
+                      className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl transition flex items-center space-x-1.5 shadow-xs shrink-0"
+                    >
+                      <Link2 className="w-3.5 h-3.5" />
+                      <span>{settingWebhook ? 'Đang kích hoạt...' : 'Kích hoạt Webhook'}</span>
+                    </button>
+                  </div>
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Nếu bạn điền Webhook trực tiếp trên trang <strong>bot.zaloplatforms.com</strong>, hãy copy <strong>Webhook URL</strong> và <strong>Secret Token</strong> ở trên để dán vào Zalo Bot Manager.
+                  </p>
+                </div>
               </div>
 
               {webhookResult && (
