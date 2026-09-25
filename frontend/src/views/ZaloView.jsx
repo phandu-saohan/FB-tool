@@ -21,7 +21,10 @@ import {
   FileText,
   Upload,
   Check,
-  Tag
+  Tag,
+  Bot,
+  ShieldCheck,
+  Link2
 } from 'lucide-react';
 import {
   getZaloDashboard,
@@ -39,7 +42,9 @@ import {
   cancelZaloCampaign,
   generateZaloAIPost,
   getZaloSettings,
-  updateZaloSettings
+  updateZaloSettings,
+  testZaloBotToken,
+  setZaloBotWebhook
 } from '../api';
 import Pagination, { usePagination } from '../components/Pagination';
 
@@ -101,6 +106,10 @@ export default function ZaloView() {
 
   // Settings State
   const [settings, setSettings] = useState(null);
+  const [testingBot, setTestingBot] = useState(false);
+  const [botTestResult, setBotTestResult] = useState(null);
+  const [settingWebhook, setSettingWebhook] = useState(false);
+  const [webhookResult, setWebhookResult] = useState(null);
 
   // Pagination
   const paginatedGroups = usePagination(groups, 8);
@@ -379,6 +388,56 @@ export default function ZaloView() {
       await loadDashboard();
     } catch (err) {
       alert('Lỗi lưu cài đặt: ' + (err.response?.data?.detail || err.message));
+    }
+  };
+
+  // Test Zalo Bot Token
+  const handleTestBot = async () => {
+    if (!settings?.bot_token?.trim()) {
+      alert('Vui lòng nhập Zalo Bot Token trước khi kiểm tra.');
+      return;
+    }
+    setTestingBot(true);
+    setBotTestResult(null);
+    try {
+      const res = await testZaloBotToken(settings.bot_token.trim());
+      setBotTestResult(res.data);
+      if (res.data.success) {
+        setSettings(prev => ({
+          ...prev,
+          bot_name: res.data.bot_name,
+          bot_username: res.data.bot_username
+        }));
+      }
+    } catch (err) {
+      setBotTestResult({
+        success: false,
+        message: err.response?.data?.detail || err.message
+      });
+    } finally {
+      setTestingBot(false);
+    }
+  };
+
+  // Set Zalo Bot Webhook
+  const handleSetWebhook = async () => {
+    if (!settings?.bot_token?.trim()) {
+      alert('Vui lòng nhập và lưu Zalo Bot Token trước.');
+      return;
+    }
+    setSettingWebhook(true);
+    setWebhookResult(null);
+    try {
+      const webhookUrl = `${window.location.origin}/api/zalo/bot/webhook`;
+      const res = await setZaloBotWebhook(webhookUrl);
+      setWebhookResult(res.data);
+    } catch (err) {
+      setWebhookResult({
+        success: false,
+        message: err.response?.data?.detail || err.message
+      });
+    } finally {
+      setSettingWebhook(false);
     }
   };
 
@@ -871,7 +930,15 @@ export default function ZaloView() {
                     paginatedGroups.paginatedItems.map(g => (
                       <tr key={g.id} className="hover:bg-slate-50/70 transition">
                         <td className="py-3.5 px-4 font-bold text-slate-900">
-                          {g.name}
+                          <div className="flex items-center space-x-2">
+                            <span>{g.name}</span>
+                            {g.group_id_external && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-700 border border-purple-200 font-semibold inline-flex items-center space-x-1">
+                                <Bot className="w-3 h-3" />
+                                <span>Bot Chat</span>
+                              </span>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3.5 px-4">
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
@@ -1168,6 +1235,108 @@ export default function ZaloView() {
             </div>
           </div>
 
+          {/* ========================================================================= */}
+          {/* Zalo Bot Platform Official Connection (bot.zaloplatforms.com) */}
+          {/* ========================================================================= */}
+          <div className="pt-5 border-t border-slate-100 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-bold border border-purple-200">
+                  <Bot className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-xs font-bold text-slate-900">Zalo Bot Platform (bot.zaloplatforms.com)</h4>
+                  <p className="text-[11px] text-slate-500">API chính thức từ Zalo để gửi bài tốc độ cao, không checkpoint</p>
+                </div>
+              </div>
+              <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-purple-50 text-purple-700 font-semibold border border-purple-200">
+                Official Bot API
+              </span>
+            </div>
+
+            <div className="space-y-3 bg-purple-50/40 p-4 rounded-2xl border border-purple-100 text-xs">
+              <div>
+                <label className="text-slate-700 font-semibold block mb-1">Zalo Bot Token *</label>
+                <div className="flex gap-2">
+                  <input
+                    type="password"
+                    placeholder="Dán token nhận từ bot.zaloplatforms.com (Ví dụ: 123456789:AA...)"
+                    value={settings.bot_token || ''}
+                    onChange={(e) => setSettings({ ...settings, bot_token: e.target.value })}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-3 py-2 text-slate-800 font-mono focus:outline-none focus:border-purple-500"
+                  />
+                  <button
+                    type="button"
+                    disabled={testingBot || !settings.bot_token}
+                    onClick={handleTestBot}
+                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white font-bold rounded-xl shadow-xs transition flex items-center space-x-1.5"
+                  >
+                    <ShieldCheck className="w-3.5 h-3.5" />
+                    <span>{testingBot ? 'Đang test...' : 'Kiểm tra token'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Bot Test Status Display */}
+              {botTestResult && (
+                <div className={`p-3 rounded-xl border flex items-center justify-between ${
+                  botTestResult.success 
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-800' 
+                    : 'bg-rose-50 border-rose-200 text-rose-800'
+                }`}>
+                  <div className="flex items-center space-x-2">
+                    {botTestResult.success ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <XCircle className="w-4 h-4 text-rose-600 shrink-0" />}
+                    <div>
+                      <div className="font-bold">{botTestResult.message}</div>
+                      {botTestResult.bot_name && (
+                        <div className="text-[11px] opacity-80">
+                          Tên Bot: <strong>{botTestResult.bot_name}</strong> {botTestResult.bot_username ? `(@${botTestResult.bot_username})` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Webhook Configuration */}
+              <div className="pt-2 border-t border-purple-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="font-semibold text-slate-800">Webhook nhận tin & tự động bắt nhóm:</span>
+                  <div className="text-[11px] text-slate-500 font-mono mt-0.5">
+                    {window.location.origin}/api/zalo/bot/webhook
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  disabled={settingWebhook || !settings.bot_token}
+                  onClick={handleSetWebhook}
+                  className="px-3.5 py-1.5 bg-white border border-purple-200 hover:bg-purple-50 text-purple-700 font-semibold rounded-xl transition self-start sm:self-auto flex items-center space-x-1.5 shadow-2xs"
+                >
+                  <Link2 className="w-3.5 h-3.5" />
+                  <span>{settingWebhook ? 'Đang thiết lập...' : 'Kích hoạt Webhook'}</span>
+                </button>
+              </div>
+
+              {webhookResult && (
+                <div className={`p-2.5 rounded-xl border text-[11px] ${
+                  webhookResult.success ? 'bg-emerald-50 border-emerald-200 text-emerald-700' : 'bg-rose-50 border-rose-200 text-rose-700'
+                }`}>
+                  {webhookResult.message}
+                </div>
+              )}
+
+              {/* Quick instructions */}
+              <div className="bg-white p-3.5 rounded-xl border border-purple-100 text-[11px] text-slate-600 space-y-1.5 leading-relaxed">
+                <div className="font-bold text-purple-800 flex items-center space-x-1">
+                  <span>💡 Hướng dẫn 3 bước kết nối Zalo Bot Platform:</span>
+                </div>
+                <div>1. Truy cập <a href="https://bot.zaloplatforms.com" target="_blank" rel="noreferrer" className="text-blue-600 underline font-semibold">bot.zaloplatforms.com</a>, đăng nhập tài khoản Zalo để tạo Bot và sao chép <strong>Bot Token</strong>.</div>
+                <div>2. Dán Token vào ô trên, bấm <strong>Kiểm tra token</strong> rồi bấm <strong>Lưu cài đặt Zalo</strong>.</div>
+                <div>3. <strong>Mời (Add) Bot vừa tạo vào các nhóm Zalo</strong> bạn muốn đăng tin. Hệ thống sẽ tự động phát hiện nhóm, hoặc bạn có thể copy <strong>Chat ID</strong> của nhóm và dán vào tab <strong>Nhóm mục tiêu</strong>.</div>
+              </div>
+            </div>
+          </div>
+
           <div className="pt-4 border-t border-slate-100 flex justify-end">
             <button
               type="submit"
@@ -1200,15 +1369,20 @@ export default function ZaloView() {
               </div>
 
               <div>
-                <label className="text-slate-700 font-medium block mb-1">Đường dẫn nhóm (Link Zalo) *</label>
+                <label className="text-slate-700 font-medium block mb-1">
+                  Đường dẫn nhóm (Link Zalo hoặc Chat ID Bot) *
+                </label>
                 <input
                   required
                   type="text"
-                  placeholder="https://zalo.me/g/xxxxxx"
+                  placeholder="https://zalo.me/g/xxxxxx HOẶC Chat ID: -123456789"
                   value={newGroup.group_link}
                   onChange={(e) => setNewGroup({ ...newGroup, group_link: e.target.value })}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-slate-800 focus:outline-none focus:border-blue-500 font-mono"
                 />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Nhập link nhóm công khai (zalo.me/g/...) hoặc Chat ID nhóm nhận từ Zalo Bot
+                </span>
               </div>
 
               <div>

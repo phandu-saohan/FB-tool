@@ -134,6 +134,9 @@ class ZaloSettingResponse(BaseModel):
     id: int
     account_name: str
     phone_number: Optional[str] = None
+    bot_token: Optional[str] = None
+    bot_name: Optional[str] = None
+    bot_username: Optional[str] = None
     daily_limit: int = 50
     min_delay_seconds: int = 15
     max_delay_seconds: int = 45
@@ -148,6 +151,9 @@ class ZaloSettingResponse(BaseModel):
 class ZaloSettingUpdate(BaseModel):
     account_name: Optional[str] = None
     phone_number: Optional[str] = None
+    bot_token: Optional[str] = None
+    bot_name: Optional[str] = None
+    bot_username: Optional[str] = None
     session_cookie: Optional[str] = None
     oa_secret_key: Optional[str] = None
     oa_access_token: Optional[str] = None

@@ -26,6 +26,7 @@ from app.schemas.zalo_schemas import (
 from app.services.zalo.group_search_service import ZaloGroupSearchService
 from app.services.zalo.zalo_worker import zalo_worker
 from app.services.zalo.zalo_ai_service import ZaloAIService
+from app.services.zalo.zalo_bot_service import ZaloBotService
 from app.utils.logger import log_info, log_warning, log_error
 
 router = APIRouter(prefix="/zalo", tags=["Zalo Marketing Suite"])
@@ -89,18 +90,31 @@ def get_zalo_groups(
 
 @router.post("/groups", response_model=ZaloGroupResponse)
 def create_zalo_group(req: ZaloGroupCreate, db: Session = Depends(get_db)):
-    # Normalize link
-    links = ZaloGroupSearchService.extract_zalo_links(req.group_link)
-    normalized_link = links[0] if links else req.group_link.strip()
+    raw_input = req.group_link.strip()
+    links = ZaloGroupSearchService.extract_zalo_links(raw_input)
+    
+    if links:
+        normalized_link = links[0]
+        group_id_ext = req.group_id_external or (normalized_link.split('/')[-1] if '/' in normalized_link else None)
+    elif raw_input.startswith("http://") or raw_input.startswith("https://"):
+        normalized_link = raw_input
+        group_id_ext = req.group_id_external or raw_input.split('/')[-1]
+    else:
+        # User entered a pure Chat ID (e.g. -123456789 or 987654321)
+        group_id_ext = raw_input
+        normalized_link = f"https://zalo.me/chat/{group_id_ext}"
 
-    existing = db.query(ZaloGroup).filter(ZaloGroup.group_link == normalized_link).first()
+    existing = db.query(ZaloGroup).filter(
+        (ZaloGroup.group_link == normalized_link) | 
+        ((ZaloGroup.group_id_external == group_id_ext) if group_id_ext else False)
+    ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Nhóm Zalo này đã tồn tại trong hệ thống.")
 
     group = ZaloGroup(
         name=req.name.strip(),
         group_link=normalized_link,
-        group_id_external=req.group_id_external or (normalized_link.split('/')[-1] if '/' in normalized_link else None),
+        group_id_external=group_id_ext,
         members_count=req.members_count or 0,
         category=req.category or "Thẩm mỹ",
         description=req.description,
@@ -296,3 +310,59 @@ def update_zalo_settings(req: ZaloSettingUpdate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(setting)
     return setting
+
+# ---------------------------------------------------------------------------
+# 6. OFFICIAL ZALO BOT PLATFORM (bot.zaloplatforms.com)
+# ---------------------------------------------------------------------------
+
+@router.post("/bot/test")
+async def test_zalo_bot(token_data: Dict[str, Optional[str]] = None, db: Session = Depends(get_db)):
+    """
+    Validates a Zalo Bot Token via GET /bot{TOKEN}/getMe and saves bot info.
+    """
+    token = (token_data or {}).get("bot_token")
+    if not token:
+        setting = zalo_worker.get_or_create_settings(db)
+        token = setting.bot_token
+
+    if not token or not token.strip():
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp Zalo Bot Token để kiểm tra.")
+
+    res = await ZaloBotService.get_me(token.strip())
+    if res.get("success"):
+        setting = zalo_worker.get_or_create_settings(db)
+        setting.bot_token = token.strip()
+        setting.bot_name = res.get("bot_name")
+        setting.bot_username = res.get("bot_username")
+        db.commit()
+    return res
+
+@router.get("/bot/webhook")
+def verify_zalo_bot_webhook():
+    return {"status": "ok", "message": "Zalo Bot Webhook endpoint is live and ready."}
+
+@router.post("/bot/webhook")
+async def receive_zalo_bot_webhook(update: Dict[str, Any], db: Session = Depends(get_db)):
+    """
+    Receives events from Zalo Bot Platform webhook.
+    Automatically captures group chats and synchronizes incoming messages.
+    """
+    res = ZaloBotService.handle_webhook_update(db, update)
+    return res
+
+@router.post("/bot/set-webhook")
+async def set_zalo_bot_webhook(payload: Dict[str, str], db: Session = Depends(get_db)):
+    """
+    Registers this server's public webhook with Zalo Bot Platform.
+    """
+    webhook_url = payload.get("webhook_url", "").strip()
+    if not webhook_url:
+        raise HTTPException(status_code=400, detail="Vui lòng cung cấp URL webhook.")
+
+    setting = zalo_worker.get_or_create_settings(db)
+    if not setting.bot_token:
+        raise HTTPException(status_code=400, detail="Chưa có Zalo Bot Token. Vui lòng nhập và lưu Bot Token trước.")
+
+    res = await ZaloBotService.set_webhook(setting.bot_token, webhook_url)
+    return res
+

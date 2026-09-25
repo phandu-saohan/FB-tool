@@ -5,11 +5,13 @@ from typing import Dict, Any, Optional, List
 from sqlalchemy.orm import Session
 from app.database.database import SessionLocal
 from app.database.models import ZaloPost, ZaloPostItem, ZaloGroup, ZaloSetting, AutomationLog
+from app.services.zalo.zalo_bot_service import ZaloBotService
 from app.utils.logger import log_info, log_warning, log_error
 
 class ZaloWorker:
     """
     Background worker that executes Zalo scheduled post campaigns with anti-spam delays.
+    Supports official Zalo Bot Platform (bot.zaloplatforms.com) and Personal Automation.
     """
 
     def __init__(self):
@@ -48,6 +50,8 @@ class ZaloWorker:
             ).all()
 
             delay_base = post.delay_seconds or 20
+            setting = self.get_or_create_settings(db)
+            bot_token = setting.bot_token
 
         # Execute items sequentially
         for item in items:
@@ -73,13 +77,24 @@ class ZaloWorker:
                 db.commit()
 
                 try:
-                    # Simulated Safe Provider / Web Session execution
-                    # In real Zalo, message is posted to group chat or webhook
                     group_name = group.name if group else "Nhóm Zalo"
                     group_link = group.group_link if group else ""
+                    chat_id = group.group_id_external if group else None
 
-                    # Simulate posting delay / delivery
-                    await asyncio.sleep(1.0)
+                    # Format message text
+                    message_text = p.content if p else ""
+                    if p and p.call_to_action_url:
+                        message_text = f"{message_text}\n\n👉 Chi tiết: {p.call_to_action_url}"
+
+                    # 1. If Zalo Bot Token and Chat ID are available, dispatch via official Zalo Bot API
+                    if bot_token and chat_id:
+                        log_info("ZALO_WORKER", f"Sending via Zalo Bot Platform to chat_id={chat_id} ({group_name})")
+                        bot_res = await ZaloBotService.send_message(bot_token, chat_id, message_text)
+                        if not bot_res.get("success"):
+                            raise Exception(bot_res.get("message") or "Lỗi gửi qua Zalo Bot API")
+                    else:
+                        # 2. Simulated Safe Provider / Web Session execution
+                        await asyncio.sleep(1.0)
 
                     db_item.status = "SENT"
                     db_item.sent_at = datetime.utcnow()
